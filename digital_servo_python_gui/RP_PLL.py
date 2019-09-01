@@ -199,10 +199,10 @@ class RP_PLL_device():
         self.sock.sendall(packet_to_send)
         data_buffer = self.recvall(4)   # read 4 bytes (32 bits)
         if data_buffer is None:
-            return 0
+            return b'\x00\x00\x00\x00'
         if len(data_buffer) != 4:
             print("read_Zynq_AXI_register_uint32() Error: len(data_buffer) != 4: repr(data_buffer) = %s" % (repr(data_buffer)))
-            return 0
+            return b'\x00\x00\x00\x00'
 
         return data_buffer
 
@@ -225,9 +225,10 @@ class RP_PLL_device():
     #        print repr(data_buffer[0:10])
         except:
             self.disconnectEvent()
+            return b'\x00\x00\x00\x00'
 
         if data_buffer is None:
-            return b''
+            return b'\x00\x00\x00\x00'
         
         return data_buffer    # returns a raw string buffer, to be read for example with np.fromstring(data_buffer, dtype=np.int16)
 
