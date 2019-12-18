@@ -59,7 +59,7 @@
 
 static bool app_exit = false;
 pid_t parent_pid;
-
+bool bVerbose = false; // this allows enabling lots of debugging messages. currently not available unless the code is recompiled
 
 // Packet formats definitions
 #pragma pack(push)
@@ -144,14 +144,25 @@ void write_value(unsigned long a_addr, int a_type, unsigned long a_value);
 uint32_t FPGA_MEMORY_START = 0x40000000UL;
 void* map_base = (void*)(-1);
 
-int fd = -1;
+int fd_dev_mem = -1;
+
+// Stuff for memory-mapping the XADC, on the GP 0 AXI master bus of the PS:
+#define MAP_SIZE_XADC (1UL<<20)	// there are really only a handful of registers in this map (1k addresses I think) (see XADC Wizard v3.2 product guide PG091, table 2-3 for a list, C_BASEADDR = 0x0)
+#define MAP_MASK_XADC (MAP_SIZE_XADC - 1)
+uint32_t FPGA_MEMORY_START_XADC = 0x80000000UL;
+void* map_base_xadc = (void*)(-1);
+
 
 void initMemoryMap()
 {
 	printf("MAP_SIZE = %lu\n", MAP_SIZE);
-	if((fd = open("/dev/mem", O_RDWR | O_SYNC)) == -1) FATAL;
-	map_base = mmap(0, MAP_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, FPGA_MEMORY_START & ~MAP_MASK);
+	if((fd_dev_mem = open("/dev/mem", O_RDWR | O_SYNC)) == -1) FATAL;
+	map_base = mmap(0, MAP_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd_dev_mem, FPGA_MEMORY_START & ~MAP_MASK);
 	if(map_base == (void *) -1) FATAL;
+
+	// open XADC memory map:
+	map_base_xadc = mmap(0, MAP_SIZE_XADC, PROT_READ | PROT_WRITE, MAP_SHARED, fd_dev_mem, FPGA_MEMORY_START_XADC & ~MAP_MASK_XADC);
+	if(map_base_xadc == (void *) -1) FATAL;
 		
 	// if (addr != 0) {
 	// 	if (val_count == 0) {
@@ -165,16 +176,26 @@ void initMemoryMap()
 
 void closeMemoryMap()
 {
+	// close main memory map to 0x4000_0000 to 0x6000_0000
 	if (map_base != (void*)(-1)) {
 		if(munmap(map_base, MAP_SIZE) == -1) FATAL;
 		map_base = (void*)(-1);
 	}
-	close(fd);
+	// close XADC memory map to 0x8000_0000 to ...
+	if (map_base != (void*)(-1)) {
+		if(munmap(map_base, MAP_SIZE) == -1) FATAL;
+		map_base = (void*)(-1);
+	}
+	close(fd_dev_mem);
 }
 
 
 uint32_t read_value(uint32_t a_addr) {
-	void* virt_addr = map_base + (a_addr & MAP_MASK);
+	void* virt_addr;
+	if (a_addr < FPGA_MEMORY_START_XADC)
+		virt_addr = map_base + (a_addr & MAP_MASK);	// register is in main memory map (0x4000_0000 to 0x6000_0000)
+	else
+		virt_addr = map_base_xadc + (a_addr & MAP_MASK_XADC); // register is in XADC memory map (0x8XXX_XXXX)
 	uint32_t read_result = 0;
 	read_result = *((uint32_t *) virt_addr);
 	//printf("0x%08x\n", read_result);
@@ -183,7 +204,12 @@ uint32_t read_value(uint32_t a_addr) {
 }
 
 void write_value(unsigned long a_addr, int a_type, unsigned long a_value) {
-	void* virt_addr = map_base + (a_addr & MAP_MASK);
+	void* virt_addr;
+	if (a_addr < FPGA_MEMORY_START_XADC)
+		virt_addr = map_base + (a_addr & MAP_MASK);	// register is in main memory map (0x4000_0000 to 0x6000_0000)
+	else
+		virt_addr = map_base_xadc + (a_addr & MAP_MASK_XADC); // register is in XADC memory map (0x8XXX_XXXX)
+	
 	//printf("writing at addr = 0x%08lx, ", (a_addr & MAP_MASK));
 	//printf("map_base = 0x%08lx, ", (unsigned long)(map_base));
 	//printf("virt_addr = 0x%08lx\n", (unsigned long)(virt_addr));
@@ -236,12 +262,14 @@ void acq_GetDataFromLogger(uint32_t* size, int16_t* buffer_in)
     const volatile uint32_t* raw_buffer = (uint32_t*)((char*)map_base + LOGGER_BASE_ADDR + LOGGER_DATA_OFFSET);
     //const volatile uint32_t* raw_buffer = (uint32_t*)((char*)map_base + OSC_BASE_ADDR + OSC_CHB_OFFSET);
 
-    printf("acq_GetDataFromLogger: reading %u points, starting from address 0x%lX\n", *size, LOGGER_BASE_ADDR + LOGGER_DATA_OFFSET);
+    if (bVerbose)
+    	printf("acq_GetDataFromLogger: reading %u points, starting from address 0x%lX\n", *size, LOGGER_BASE_ADDR + LOGGER_DATA_OFFSET);
 
     for (uint32_t i = 0; i < (*size); ++i) {
         buffer_in[i] = (raw_buffer[i % LOGGER_BUFFER_SIZE]);
     }
-    printf("buffer_in[0] = %hd\n", buffer_in[0]);
+    if (bVerbose)
+    	printf("buffer_in[0] = %hd\n", buffer_in[0]);
 }
 
 
@@ -721,6 +749,8 @@ static int handleConnection(int connfd) {
     // Variables for the "reboot" message
     bool bReboot = false;
 
+    
+
     //Receive a message from client
     while( (read_size = recv(connfd , buffer , MAX_BUFF_SIZE , 0)) > 0 )
     {
@@ -743,7 +773,7 @@ static int handleConnection(int connfd) {
         // Copy read buffer into message buffer
         memcpy(message_buff + msg_end, buffer, read_size);
         msg_end += read_size;
-        printf("msg_end = %u\n", (uint32_t)msg_end);
+        //printf("msg_end = %u\n", (uint32_t)msg_end);
 
         while (msg_end >= iRequiredBytes)
         {
@@ -753,10 +783,12 @@ static int handleConnection(int connfd) {
 	        	if (msg_end >= sizeof(message_magic_bytes))
 	        	{
 					// we can read the packet 'header', or magic bytes:
-					printf("buffer is long enough to parse out magic bytes at least.\n");
+					if (bVerbose)
+						printf("buffer is long enough to parse out magic bytes at least.\n");
 		        	// check the packet "header"
 		        	message_magic_bytes = *((uint32_t*)&message_buff[0]);
-		        	printf("message_magic_bytes = 0x%X\n", message_magic_bytes);
+		        	if (bVerbose)
+		        		printf("message_magic_bytes = 0x%X\n", message_magic_bytes);
 		        	bHaveMagicBytes = true;
 	        	}
 	        }
@@ -775,9 +807,12 @@ static int handleConnection(int connfd) {
 		        		pPacketWriteReg = (binary_packet_write_reg_t*) message_buff;
 
 
-		        		printf("Received a register write packet.\n");
-		        		printf("message_write_address = 0x%X (hex)\n", pPacketWriteReg->write_address);
-		        		printf("message_write_value = %u (decimal)\n", pPacketWriteReg->write_value);
+		        		if (bVerbose)
+		        			printf("Received a register write packet.\n");
+		        		if (bVerbose)
+		        			printf("message_write_address = 0x%X (hex)\n", pPacketWriteReg->write_address);
+		        		if (bVerbose)
+		        			printf("message_write_value = %u (decimal)\n", pPacketWriteReg->write_value);
 		        		fflush(stdout);
 
 		        		// perform the actual memory write:
@@ -788,7 +823,8 @@ static int handleConnection(int connfd) {
 		        		bHaveMagicBytes = false;
 		        		iRequiredBytes = sizeof(message_magic_bytes);
 	        		} else {
-	        			printf("Received a register write packet, but we have not received the full packet yet.\n");
+	        			if (bVerbose)
+	        				printf("Received a register write packet, but we have not received the full packet yet.\n");
 
 	        		}
 	        	////////////////////////////////////////////////////////////
@@ -803,9 +839,12 @@ static int handleConnection(int connfd) {
 
 
 
-		        		printf("Received a register read packet.\n");
-		        		printf("pPacketReadReg->start_address = 0x%X (hex)\n", pPacketReadReg->start_address);
-		        		printf("pPacketReadReg->reserved = %u (decimal) (currently unused)\n", pPacketReadReg->reserved);
+		        		if (bVerbose)
+		        			printf("Received a register read packet.\n");
+		        		if (bVerbose)
+		        			printf("pPacketReadReg->start_address = 0x%X (hex)\n", pPacketReadReg->start_address);
+		        		if (bVerbose)
+		        			printf("pPacketReadReg->reserved = %u (decimal) (currently unused)\n", pPacketReadReg->reserved);
 
 		        		// perform actual memory read, dump 32 bits value into TCP socket.
 		        		uint32_t register_value;
@@ -813,7 +852,8 @@ static int handleConnection(int connfd) {
 
 		        		// send it back:
 		        		send(connfd, &register_value, sizeof(register_value), 0);
-		        		printf("register sent. addr = 0x%X, value = %u\n", pPacketReadReg->start_address, register_value);
+		        		if (bVerbose)
+		        			printf("register sent. addr = 0x%X, value = %u\n", pPacketReadReg->start_address, register_value);
 
 		        		// reset our message parsing state variables
 		        		bytes_consumed = sizeof(binary_packet_read_reg_t);
@@ -821,7 +861,8 @@ static int handleConnection(int connfd) {
 		        		iRequiredBytes = sizeof(message_magic_bytes);
 
 		        	} else {
-		        		printf("Received a register read packet, but we have not received the full packet yet.\n");
+		        		if (bVerbose)
+		        			printf("Received a register read packet, but we have not received the full packet yet.\n");
 
 		        	}
 	        	////////////////////////////////////////////////////////////
@@ -836,12 +877,16 @@ static int handleConnection(int connfd) {
 
 
 
-		        		printf("Received a buffer read packet.\n");
-		        		printf("pPacketReadBuffer->start_address = 0x%X (hex) (currently unused)\n", pPacketReadBuffer->start_address);
-		        		printf("pPacketReadBuffer->number_of_points = %u (decimal)\n", pPacketReadBuffer->number_of_points);
+		        		if (bVerbose)
+		        			printf("Received a buffer read packet.\n");
+		        		if (bVerbose)
+		        			printf("pPacketReadBuffer->start_address = 0x%X (hex) (currently unused)\n", pPacketReadBuffer->start_address);
+		        		if (bVerbose)
+		        			printf("pPacketReadBuffer->number_of_points = %u (decimal)\n", pPacketReadBuffer->number_of_points);
 
 		        		// do an acquisition
-		        		// printf("running acquisition...\n");
+		        		if (bVerbose)// 
+		        			printf("running acquisition...\n");
 					    struct timespec time_start, time_end;
 					    // clock_gettime(CLOCK_REALTIME, &time_start);
 					    // stuff to be timed would go here
@@ -849,28 +894,32 @@ static int handleConnection(int connfd) {
 		        		//acq_MinimumSetup();
 		        		//acq_LoggerStartWrite();
 					    // clock_gettime(CLOCK_REALTIME, &time_end);
-					    // printf("acq_MinimumSetup(), elapsed = %d seconds + %ld ms\n", (int)(time_end.tv_sec-time_start.tv_sec), (long int)(time_end.tv_nsec-time_start.tv_nsec)/1000000);
+					    if (bVerbose)// 
+					    	printf("acq_MinimumSetup(), elapsed = %d seconds + %ld ms\n", (int)(time_end.tv_sec-time_start.tv_sec), (long int)(time_end.tv_nsec-time_start.tv_nsec)/1000000);
 
 		        		// this should contain the actual data, note that the writing has surely wrapped and the start/end of the data run will be random in the dataset
 		        		// TODO: sync with the end of the acquisition in the buffer.
 		        		clock_gettime(CLOCK_REALTIME, &time_start);
 		        		uint32_t acq_size = MIN(LOGGER_BUFFER_SIZE, pPacketReadBuffer->number_of_points);
-		        		// printf("acquisition completed, grabbing %u points....\n", acq_size);
+		        		if (bVerbose)// 
+		        			printf("acquisition completed, grabbing %u points....\n", acq_size);
 		        		//acq_GetDataRawV2_CHA(0, &acq_size, data_buffer);
 		        		acq_GetDataFromLogger(&acq_size, data_buffer);
 					    clock_gettime(CLOCK_REALTIME, &time_end);
-					    printf("getdata elapsed = %d seconds + %ld ns\n", (int)(time_end.tv_sec-time_start.tv_sec), (long int)(time_end.tv_nsec-time_start.tv_nsec));
+					    if (bVerbose)
+					    	printf("getdata elapsed = %d seconds + %ld ns\n", (int)(time_end.tv_sec-time_start.tv_sec), (long int)(time_end.tv_nsec-time_start.tv_nsec));
 		        		// for (int k=100; k<140; k++)
-		        		// 	printf("%d, ", data_buffer[k]);
-		        		// printf("\n");
 
 		        		// dump this into the TCP socket:
-		        		// printf("before socket send()\n");
+		        		if (bVerbose)// 
+		        			printf("before socket send()\n");
 		        		clock_gettime(CLOCK_REALTIME, &time_start);
 		        		send(connfd, data_buffer, (size_t)acq_size*sizeof(int16_t), 0);
 					    clock_gettime(CLOCK_REALTIME, &time_end);
-					    printf("send() elapsed = %d seconds + %ld ns\n", (int)(time_end.tv_sec-time_start.tv_sec), (long int)(time_end.tv_nsec-time_start.tv_nsec));
-		        		printf("socket send() complete\n");
+					    if (bVerbose)
+					    	printf("send() elapsed = %d seconds + %ld ns\n", (int)(time_end.tv_sec-time_start.tv_sec), (long int)(time_end.tv_nsec-time_start.tv_nsec));
+		        		if (bVerbose)
+		        			printf("socket send() complete\n");
 
 
 		        		// reset our message parsing state variables
@@ -878,7 +927,8 @@ static int handleConnection(int connfd) {
 		        		bHaveMagicBytes = false;
 		        		iRequiredBytes = sizeof(message_magic_bytes);
 	        		} else {
-	        			printf("Received a buffer read packet, but we have not received the full packet yet.\n");
+	        			if (bVerbose)
+	        				printf("Received a buffer read packet, but we have not received the full packet yet.\n");
 
 	        		}
 
@@ -908,7 +958,8 @@ static int handleConnection(int connfd) {
 		        		bHaveMagicBytes = false;
 		        		iRequiredBytes = sizeof(message_magic_bytes);
 		        	} else {
-		        		printf("Received a 'start flank servo' packet, but we have not received the full packet yet.\n");
+		        		if (bVerbose)
+		        			printf("Received a 'start flank servo' packet, but we have not received the full packet yet.\n");
 		        	}
 
 	        	////////////////////////////////////////////////////////////
@@ -923,15 +974,20 @@ static int handleConnection(int connfd) {
 	        			iRequiredBytes = sizeof(binary_packet_write_file_t);
 	        			if (msg_end >= iRequiredBytes) {
 	        				bHaveFileWriteHeader = true;
-	        				printf("Received complete file write header.\n");
+	        				if (bVerbose)
+	        					printf("Received complete file write header.\n");
 			        		
 			        		pPacketWriteFile = (binary_packet_write_file_t*) message_buff;
-			        		printf("address of message_buff = 0x%x, address of pPacketWriteFile = 0x%x\n", (uint) message_buff, (uint) pPacketWriteFile);
+			        		if (bVerbose)
+			        			printf("address of message_buff = 0x%x, address of pPacketWriteFile = 0x%x\n", (uint) message_buff, (uint) pPacketWriteFile);
 
-			        		printf("pPacketWriteFile->filename_length = %u\n", pPacketWriteFile->filename_length);
-			        		printf("pPacketWriteFile->file_size       = %u\n", pPacketWriteFile->file_size);
+			        		if (bVerbose)
+			        			printf("pPacketWriteFile->filename_length = %u\n", pPacketWriteFile->filename_length);
+			        		if (bVerbose)
+			        			printf("pPacketWriteFile->file_size       = %u\n", pPacketWriteFile->file_size);
 			        		iRequiredBytes = sizeof(binary_packet_write_file_t) + pPacketWriteFile->filename_length + pPacketWriteFile->file_size;
-			        		printf("iRequiredBytes                    = %u\n", iRequiredBytes);
+			        		if (bVerbose)
+			        			printf("iRequiredBytes                    = %u\n", iRequiredBytes);
 
 
 	        			}
@@ -939,43 +995,47 @@ static int handleConnection(int connfd) {
 	        		if (bHaveFileWriteHeader) {
 	        			// we know how long the total message needs to be, so we just wait to have received everything.
 	        			if (msg_end >= iRequiredBytes) {
-	        				printf("Complete file write message received.\n");
-	        				printf("msg_end = %u, iRequiredBytes = %u\n", msg_end, iRequiredBytes);
+	        				if (bVerbose)
+	        					printf("Complete file write message received.\n");
+	        				if (bVerbose)
+	        					printf("msg_end = %u, iRequiredBytes = %u\n", msg_end, iRequiredBytes);
 
 							// first copy the filename to a string
 							pPacketWriteFile = (binary_packet_write_file_t*) message_buff;	// we need to update our packet pointer because message_buf might have changed its location if it has been reallocated since last time pPacketWriteFile was set
 							char * strNewFileName = (char*) malloc((pPacketWriteFile->filename_length+1)*sizeof(char));	// the +1 is for the \0 character
 							if (!strNewFileName)
-								printf("malloc failed to allocate a string of size: %u\n", pPacketWriteFile->filename_length+1);
-							else 
 							{
-								printf("address of strNewFileName = 0x%x, address of pPacketWriteFile = 0x%x\n", (uint) strNewFileName, (uint) pPacketWriteFile);
-								printf("malloc succeeded to allocate a string of size: %u\n", pPacketWriteFile->filename_length+1);
-								printf("pPacketWriteFile->filename_length = %u\n", pPacketWriteFile->filename_length);
-								printf("pPacketWriteFile->file_size       = %u\n", pPacketWriteFile->file_size);
+								if (bVerbose)
+									printf("malloc failed to allocate a string of size: %u\n", pPacketWriteFile->filename_length+1);
+							} else {
+								if (bVerbose)
+									printf("address of strNewFileName = 0x%x, address of pPacketWriteFile = 0x%x\n", (uint) strNewFileName, (uint) pPacketWriteFile);
+								if (bVerbose)
+									printf("malloc succeeded to allocate a string of size: %u\n", pPacketWriteFile->filename_length+1);
+								if (bVerbose)
+									printf("pPacketWriteFile->filename_length = %u\n", pPacketWriteFile->filename_length);
+								if (bVerbose)
+									printf("pPacketWriteFile->file_size       = %u\n", pPacketWriteFile->file_size);
 								memcpy((void*) strNewFileName, (void*)(message_buff+sizeof(binary_packet_write_file_t)), pPacketWriteFile->filename_length);
-								printf("memcpy succeeded\n");
-								printf("pPacketWriteFile->filename_length = %u\n", pPacketWriteFile->filename_length);
-								printf("pPacketWriteFile->file_size       = %u\n", pPacketWriteFile->file_size);
+								if (bVerbose)
+									printf("memcpy succeeded\n");
+								if (bVerbose)
+									printf("pPacketWriteFile->filename_length = %u\n", pPacketWriteFile->filename_length);
+								if (bVerbose)
+									printf("pPacketWriteFile->file_size       = %u\n", pPacketWriteFile->file_size);
 								// add \0 termination
 								strNewFileName[pPacketWriteFile->filename_length] = '\0';
 
-								printf("filename: %s\n", strNewFileName);
-								// printf("filename: \n" );
-								// //strNewFileName[pPacketWriteFile->filename_length-1] = '\0';
-								// for (int k=0; k<pPacketWriteFile->filename_length+1; k++)
-								// {
-								// 	printf("k = %d\n", k);
-								// 	strNewFileName[k] = '\0';
-								// 	printf("k = %d, filename: \n", k);
-								// }
+								if (bVerbose)
+									printf("filename: %s\n", strNewFileName);
 
 
 								// then we should call fopen with the filename, then fwrite with the right pointer.
 								file_pointer = fopen(strNewFileName, "wb");
 								if (!file_pointer)
 								{
-									printf("Error opening file %s. No contents written.", strNewFileName);
+									if (bVerbose)
+										printf("Error opening file %s. No contents written.", strNewFileName);
 								} else {
 									// write file contents
 									fwrite((void*)(message_buff+sizeof(binary_packet_write_file_t)+pPacketWriteFile->filename_length) , 1, pPacketWriteFile->file_size, file_pointer);
@@ -1014,13 +1074,16 @@ static int handleConnection(int connfd) {
 	        			iRequiredBytes = sizeof(binary_packet_shell_command_t);
 	        			if (msg_end >= iRequiredBytes) {
 	        				bHaveShellCommandHeader = true;
-	        				printf("Received complete file write header.\n");
+	        				if (bVerbose)
+	        					printf("Received complete file write header.\n");
 			        		
 			        		pPacketShellCommand = (binary_packet_shell_command_t*) message_buff;
 
-			        		printf("pPacketShellCommand->command_length = %u\n", pPacketShellCommand->command_length);
+			        		if (bVerbose)
+			        			printf("pPacketShellCommand->command_length = %u\n", pPacketShellCommand->command_length);
 			        		iRequiredBytes = sizeof(binary_packet_write_file_t) + pPacketShellCommand->command_length;
-			        		printf("iRequiredBytes                    = %u\n", iRequiredBytes);
+			        		if (bVerbose)
+			        			printf("iRequiredBytes                    = %u\n", iRequiredBytes);
 
 
 	        			}
@@ -1028,21 +1091,27 @@ static int handleConnection(int connfd) {
 	        		if (bHaveShellCommandHeader) {
 	        			// we know how long the total message needs to be, so we just wait to have received everything.
 	        			if (msg_end >= iRequiredBytes) {
-	        				printf("Complete shell command message received.\n");
-	        				printf("msg_end = %u, iRequiredBytes = %u\n", msg_end, iRequiredBytes);
+	        				if (bVerbose)
+	        					printf("Complete shell command message received.\n");
+	        				if (bVerbose)
+	        					printf("msg_end = %u, iRequiredBytes = %u\n", msg_end, iRequiredBytes);
 
 							// first copy the filename to a string
 							pPacketShellCommand = (binary_packet_shell_command_t*) message_buff;	// we need to update our packet pointer because message_buf might have changed its location if it has been reallocated since last time pPacketWriteFile was set
 							char * strCommand = (char*) malloc((pPacketShellCommand->command_length+1)*sizeof(char));	// the +1 is for the \0 character
 							if (!strCommand)
-								printf("malloc failed to allocate a string of size: %u\n", pPacketShellCommand->command_length+1);
+							{
+								if (bVerbose)
+									printf("malloc failed to allocate a string of size: %u\n", pPacketShellCommand->command_length+1);
+							}
 							else 
 							{
 								memcpy((void*) strCommand, (void*)(message_buff+sizeof(binary_packet_write_file_t)), pPacketShellCommand->command_length);
 								// add \0 termination
 								strCommand[pPacketShellCommand->command_length] = '\0';
 
-								printf("shell command: '%s'\n", strCommand);
+								if (bVerbose)
+									printf("shell command: '%s'\n", strCommand);
 
 								// send command to shell using system()
 								system(strCommand);
@@ -1082,7 +1151,8 @@ static int handleConnection(int connfd) {
 		        		}
 
 
-		        		printf("exiting message parsing loop.\n");
+		        		if (bVerbose)
+		        			printf("exiting message parsing loop.\n");
 		        		bReboot = true;
 		        		//goto loop_exit;	// we need to exit two nested while loops
 
@@ -1097,8 +1167,10 @@ static int handleConnection(int connfd) {
 
 	        	else {	// magic bytes didn't match any known packet type
 
-	        		printf("magic bytes do not match. got: 0x%0x, msg_end = %u\n", message_magic_bytes, msg_end);
-	        		printf("This will probably mean that the whole protocol is de-synced and erronous values will be read/written\n");
+	        		if (bVerbose)
+	        			printf("magic bytes do not match. got: 0x%0x, msg_end = %u\n", message_magic_bytes, msg_end);
+	        		if (bVerbose)
+	        			printf("This will probably mean that the whole protocol is de-synced and erronous values will be read/written\n");
 	        		bytes_consumed = sizeof(message_magic_bytes);
 	        		bHaveMagicBytes = false;
 	        		return 0;
@@ -1113,9 +1185,11 @@ static int handleConnection(int connfd) {
 	    		if (msg_end < bytes_consumed)
 	    		{
 	    			bytes_consumed = 0;
-	    			printf("Assert error: msg_end < bytes_consumed, msg_end = %u, bytes_consumed = %u\n", (uint32_t)msg_end, (uint32_t)bytes_consumed);
+	    			if (bVerbose)
+	    				printf("Assert error: msg_end < bytes_consumed, msg_end = %u, bytes_consumed = %u\n", (uint32_t)msg_end, (uint32_t)bytes_consumed);
 	    		} else {
-	        		printf("consumed %u bytes from the buffer.\n", (uint32_t)bytes_consumed);
+	        		if (bVerbose)
+	        			printf("consumed %u bytes from the buffer.\n", (uint32_t)bytes_consumed);
 		        	msg_end -= bytes_consumed;
 		        	char *m = message_buff + bytes_consumed;
 			        if (message_buff != m && msg_end > 0) {
@@ -1223,7 +1297,7 @@ int main(int argc, char *argv[])
     bool bBindSuccess = false;
     uint iRetries = 0;
 
-    while (!bBindSuccess && iRetries < 200)
+    while (!bBindSuccess && iRetries < 200 && !app_exit)
     {
 	    if (bind(listenfd, (struct sockaddr*)&serv_addr, sizeof(serv_addr)) == -1)
 	    {
@@ -1235,6 +1309,10 @@ int main(int argc, char *argv[])
 	    } else {
 	    	bBindSuccess = true;
 	    }
+    }
+    if (app_exit)
+    {
+    	return EXIT_FAILURE;
     }
     if (!bBindSuccess)	// we didn't succeed after 20 retries...
     {

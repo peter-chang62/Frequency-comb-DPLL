@@ -18,6 +18,8 @@ from user_friendly_QLineEdit import user_friendly_QLineEdit
 # stuff for Python 3 port
 import pyqtgraph as pg
 
+from SocketErrorLogger import logCommsErrorsAndBreakoutOfFunction
+
 class LoopFiltersUI(Qt.QWidget):
 	
 	MINIMUM_GAIN_DISPLAY = 10**(-120/20)
@@ -176,7 +178,7 @@ class LoopFiltersUI(Qt.QWidget):
 		
 		self.qchk_bKpCrossing = Qt.QCheckBox('fi refer to kp crossover')
 		self.qchk_bKpCrossing.setChecked(False)
-		self.qchk_bKpCrossing.clicked.connect(self.textboxChanged)
+		self.qchk_bKpCrossing.clicked.connect(self.bKpCrossingPress)
 		
 		self.qchk_lockSlider = Qt.QCheckBox('Lock D sliders')
 		self.qchk_lockSlider.setChecked(False)
@@ -498,7 +500,7 @@ class LoopFiltersUI(Qt.QWidget):
 		self.updateFilterSettings()
 		self.updateGraph()
 
-	def textboxChanged_withoutUpdateFPGA(self):
+	def textboxChanged_withoutUpdatingFPGA(self):
 #        print('textboxChanged()')
 #        traceback.print_stack()
 	
@@ -533,36 +535,6 @@ class LoopFiltersUI(Qt.QWidget):
 		
 		# Read the firmware gain limits to check if the values are within range:
 		self.getLimits()
-		
-#        if self.kp_min <= P_gain and P_gain <= self.kp_max:
-#            self.qedit_kp.setStyleSheet("background-color: %s" % Qt.QColor(QtCore.Qt.white).name())
-#        else:
-#            # red background
-#            self.qedit_kp.setStyleSheet("color: white; background-color: %s" % Qt.QColor(QtCore.Qt.red).name())
-#
-#        if self.ki_min <= I_gain and I_gain <= self.ki_max:
-#            self.qedit_fi.setStyleSheet("background-color: %s" % Qt.QColor(QtCore.Qt.white).name())
-#        else:
-#            # red background
-#            self.qedit_fi.setStyleSheet("color: white; background-color: %s" % Qt.QColor(QtCore.Qt.red).name())
-#            
-#        if self.kii_min <= II_gain and II_gain <= self.kii_max:
-#            self.qedit_fii.setStyleSheet("background-color: %s" % Qt.QColor(QtCore.Qt.white).name())
-#        else:
-#            # red background
-#            self.qedit_fii.setStyleSheet("color: white; background-color: %s" % Qt.QColor(QtCore.Qt.red).name())
-#            
-#        if self.kd_min <= D_gain and D_gain <= self.kd_max:
-#            self.qedit_fd.setStyleSheet("background-color: %s" % Qt.QColor(QtCore.Qt.white).name())
-#        else:
-#            # red background
-#            self.qedit_fd.setStyleSheet("color: white; background-color: %s" % Qt.QColor(QtCore.Qt.red).name())
-#            
-#        if self.kdf_min <= D_coef and D_coef <= self.kdf_max:
-#            self.qedit_fdf.setStyleSheet("background-color: %s" % Qt.QColor(QtCore.Qt.white).name())
-#        else:
-#            # red background
-#            self.qedit_fdf.setStyleSheet("color: white; background-color: %s" % Qt.QColor(QtCore.Qt.red).name())
 		
 		if self.kp_min <= P_gain and P_gain <= self.kp_max:
 			self.qlabel_kp.setStyleSheet("background-color: #F0F0F0")
@@ -693,16 +665,17 @@ class LoopFiltersUI(Qt.QWidget):
 			
 		return (P_gain, I_gain, II_gain, D_gain, D_coef, bLock)
 		
+	@logCommsErrorsAndBreakoutOfFunction()
 	def updateFilterSettings(self):
 #        print('LoopFiltersUI::updateFilterSettings(): Entering')
-#        traceback.print_stack()
+#		traceback.print_stack()
 
 		(P_gain, I_gain, II_gain, D_gain, D_coef, bLock) = self.getActualControllerDesign()
 		
 		self.sl.pll[self.filter_number].set_pll_settings(self.sl, P_gain, I_gain, II_gain, D_gain, D_coef, bLock)
-		
 #        print('LoopFiltersUI::updateFilterSettings(): Exiting')
 		
+	@logCommsErrorsAndBreakoutOfFunction()
 	def getFilterSettings(self):
 
 		(P_gain, I_gain, II_gain, D_gain, D_coef, bLock) = self.sl.pll[self.filter_number].get_pll_settings(self.sl)
@@ -796,7 +769,7 @@ class LoopFiltersUI(Qt.QWidget):
 			self.qchk_kd.setChecked(True)
 
 		if bLock == 1:
-			self.qchk_lock.setChecked(True) #Nothing on the gui, but XEM_GUI_MainWindow use this qchk to check at the look
+			self.qchk_lock.setChecked(True) #Nothing on the gui, but XEM_GUI_MainWindow use this qchk to check at the lock
 		else:
 			self.qchk_lock.setChecked(False)
 
@@ -829,10 +802,27 @@ class LoopFiltersUI(Qt.QWidget):
 		self.qslider_kp.setValue(np.max((10*kp, 10*gain_min)))
 		self.qslider_kp.blockSignals(False)
 		
-		self.textboxChanged_withoutUpdateFPGA() # To update the sliders
+		self.textboxChanged_withoutUpdatingFPGA() # To update the sliders
 
 				
-		
+	def bKpCrossingPress(self):
+		(kp, fi, fii, fd, fdf, fmin, fmax, gain_min, gain_max, bLock) = self.getSettings()
+		if self.qchk_bKpCrossing.isChecked(): #Give new state
+			#print('Was referring to 0db, now refer to kp')
+			I_gain = 1/self.kc * fi * (2*np.pi/self.sl.fs)
+			fi = (I_gain*self.kc*self.sl.fs/(2*np.pi))/10**(kp/20)
+		else:
+			#print('Was referring to kp, now refer to 0db')
+			I_gain = 10**(kp/20)/self.kc * fi * (2*np.pi/self.sl.fs)
+			fi = float(I_gain)*float(self.kc)*float(self.sl.fs)/(float(2)*float(np.pi))
+		self.qedit_fi.blockSignals(True)
+		self.qedit_fi.setText('{:.3e}'.format(fi))
+		self.qedit_fi.blockSignals(False)
+		self.qslider_fi.blockSignals(True)
+		self.qslider_fi.setValue((100*np.log10(np.max((fi, fmin)))))
+		self.qslider_fi.blockSignals(False)
+		self.textboxChanged_withoutUpdatingFPGA() # To update the sliders
+		self.textboxChanged()
 		
 		
 	def lockSlider(self):

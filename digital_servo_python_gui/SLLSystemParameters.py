@@ -36,12 +36,15 @@ class SLLSystemParameters():
         self.root.append(ET.Element('Output_offset_in_volts', DAC0='0.0274', DAC1='0', DAC2='27'))
         self.root.append(ET.Element('PLL0_settings', kp='10', fi='45e3', fii='3.4e3', fd='1', fdf='1', chkKd='False', chkKp='False', chkLock='False', chkKpCrossing='False'))
         self.root.append(ET.Element('PLL1_settings', kp='-5.6', fi='141e3', fii='3.24e3', fd='1', fdf='1', chkKd='False', chkKp='True', chkLock='False', chkKpCrossing='True'))
-        self.root.append(ET.Element('PLL2_settings', kp='-120', fi='1e-2', fii='0', fd='1', fdf='1', chkKd='False', chkKp='False', chkLock='False', chkKpCrossing='False'))
-        
+#        self.root.append(ET.Element('PLL2_settings', kp='-120', fi='1e-2', fii='0', fd='1', fdf='1', chkKd='False', chkKp='False', chkLock='False', chkKpCrossing='False'))
+        self.root.append(ET.Element('PLL2_settings', LoopFilter='0', flip_acquisition='True', flip_lock='True', AcqGain='-21', LockGain='-23')) # <!--LoopFilter = 0: off | 1: slow piezo only | 2: fast piezo only | 3:both piezo (equivalent to lock) -->
         self.root.append(ET.Element('PWM0_settings', standard='3.3', levels='256', default='0.0', minval='0.0', maxval='3.3'))
         
         self.root.append(ET.Element('Main_window_settings', refresh_delay='500', N_samples_adc='1.75e3', N_samples_ddc='1e6', Integration_limit='5e6'))
         self.root.append(ET.Element('Triangular_averaging', DAC1='1', DAC0='1'))
+
+        self.root.append(ET.Element('Auto_unlock', chkAutoUnlock='False', threshold='0.05'))
+        self.root.append(ET.Element('Temperature_control', chkControl='True', threshold_step='0.35', threshold_disable='0.05', step_size='0.05', step_delay='60', bIncrementalOnly="False"))
 
         self.root.append(ET.Element('Dither_frequency', DAC1='5.1e3', DAC0='1e3'))
         self.root.append(ET.Element('Dither_integration_time', DAC1='0.1', DAC0='0.1'))
@@ -49,7 +52,7 @@ class SLLSystemParameters():
         self.root.append(ET.Element('Dither_mode', DAC1='2', DAC0='2'))
         
         self.root.append(ET.Element('VCO_settings', VCO_offset='0.00', VCO_amplitude='0.5', VCO_connection='0'))
-        self.root.append(ET.Element('RP_settings', Fan_state='0', PLL2_connection='0'))
+        self.root.append(ET.Element('RP_settings', Fan_state='0', PLL2_connection='0', Clock_select=0))
         self.root.append(ET.Element('Filter_select', DAC1='0', DAC0='0'))
         self.root.append(ET.Element('Angle_select', DAC1='0', DAC0='0'))
 
@@ -89,8 +92,7 @@ class SLLSystemParameters():
         # DAC0_gain = int(self.getValue('Input_Output_gain', 'DAC0'))
         # DAC1_gain = int(self.getValue('Input_Output_gain', 'DAC1'))
         
-        # sl.set_pga_gains(ADC0_gain, ADC1_gain, DAC0_gain, DAC1_gain, bSendToFPGA)
-        
+       
         # Set the DAC output limits:
         limit_low = float(self.getValue('Output_limits_low', 'DAC0'))    # the limit is in volts
         limit_high = float(self.getValue('Output_limits_high', 'DAC0'))    # the limit is in volts
@@ -106,9 +108,9 @@ class SLLSystemParameters():
         ##
         ## HB, 4/27/2015, Added PWM support on DOUT0
         ##
-        PWM0_standard = float(self.getValue('PWM0_settings', 'standard'));
-        PWM0_levels   = int(self.getValue('PWM0_settings', 'levels'));
-        PWM0_default  = float(self.getValue('PWM0_settings', 'default'));
+        PWM0_standard = float(self.getValue('PWM0_settings', 'standard'))
+        PWM0_levels   = int(self.getValue('PWM0_settings', 'levels'))
+        PWM0_default  = float(self.getValue('PWM0_settings', 'default'))
         # Convert to counts
         value_in_counts = sl.convertPWMVoltsToCounts(PWM0_standard, PWM0_levels, PWM0_default)
         # Send to FPGA

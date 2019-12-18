@@ -109,9 +109,9 @@ class DisplayVNAWindow(QtGui.QWidget):
         ## Read out the results from the FPGA:
         try:
             (transfer_function_complex, frequency_axis) = self.sl.read_VNA_samples_from_DDR2()
-            print('len(transfer_function_complex) = %d, len(frequency_axis) = %d' % (len(transfer_function_complex), len(frequency_axis)))
-            print(np.real(transfer_function_complex))
-            print(np.imag(transfer_function_complex))
+            # print('len(transfer_function_complex) = %d, len(frequency_axis) = %d' % (len(transfer_function_complex), len(frequency_axis)))
+            # print(np.real(transfer_function_complex))
+            # print(np.imag(transfer_function_complex))
         except:
             self.sl.bDDR2InUse = False
             print("Exception reading VNA samples from DDR2")
@@ -222,9 +222,9 @@ class DisplayVNAWindow(QtGui.QWidget):
         
         try:
             output_amplitude = int(float(self.sl.DACs_limit_high[output_select] - self.sl.DACs_limit_low[output_select])*float(self.qedit_output_amplitude.text())/2)
-            if output_select == 2:
-                # The DAC2 has a particularity in that the VNA outputs only a 16-bit number, and it is multiplied by 4 to fit the 20-bit range of DAC2.
-                output_amplitude = output_amplitude/4
+            # if output_select == 2:
+            #     # The DAC2 has a particularity in that the VNA outputs only a 16-bit number, and it is multiplied by 4 to fit the 20-bit range of DAC2.
+            #     output_amplitude = output_amplitude/4
         except:
             output_amplitude = 1
             pass
@@ -255,9 +255,9 @@ class DisplayVNAWindow(QtGui.QWidget):
         
         try:
             output_amplitude = int(float(self.sl.DACs_limit_high[output_select] - self.sl.DACs_limit_low[output_select])*float(self.qedit_dither_amplitude.text())/2)
-            if output_select == 2:
-                # The DAC2 has a particularity in that the VNA outputs only a 16-bit number, and it is multiplied by 4 to fit the 20-bit range of DAC2.
-                output_amplitude = output_amplitude/4
+            # if output_select == 2:
+            #     # The DAC2 has a particularity in that the VNA outputs only a 16-bit number, and it is multiplied by 4 to fit the 20-bit range of DAC2.
+            #     output_amplitude = output_amplitude/4
         except:
             output_amplitude = 0
             pass
@@ -296,6 +296,7 @@ class DisplayVNAWindow(QtGui.QWidget):
         input_select = 0
         number_of_frequencies = 8
         System_settling_time = 1e-3
+        print("before syst ident")
         self.sl.setup_system_identification(input_select, output_select, modulation_frequency_in_hz, modulation_frequency_in_hz, number_of_frequencies, System_settling_time, output_amplitude)
         
         print('(output_select, modulation_frequency_in_hz, output_amplitude, bSquareWave, bEnableDither) = %d, %f, %f, %d, %d' % (output_select, modulation_frequency_in_hz, output_amplitude, bSquareWave, bEnableDither))
@@ -445,9 +446,45 @@ class DisplayVNAWindow(QtGui.QWidget):
         
         grid.addWidget(self.qbtn_dither,                    4, 0, 1, 2)
         self.qgroupbox_dither.setLayout(grid)    
+
+
+        ######################################################################
+        # Settings
+        ######################################################################
+        self.qgroupbox_test_osc = Qt.QGroupBox('Variable duty-cycle oscillator')
+        self.qlbl_osc_freq = Qt.QLabel('Frequency [Hz]:')
+        self.qedit_osc_freq = Qt.QLineEdit('200e3')
+        self.qedit_osc_freq.textChanged.connect(self.oscClicked)
+        # On/Off button
+        self.qbtn_osc = QtGui.QPushButton('Activate output')
+        self.qbtn_osc.setCheckable(True)
+        self.qbtn_osc.setChecked(True)
+        self.qbtn_osc.clicked.connect(self.oscClicked)
+        # Polarity setting
+        self.qchk_osc_polarity = Qt.QCheckBox('Invert polarity')
+        self.qchk_osc_polarity.clicked.connect(self.oscClicked)
+        # Duty cycle slider
+        self.q_osc_duty_cyle = Qt.QSlider()
+        self.q_osc_duty_cyle.valueChanged.connect(self.oscClicked)
+        self.q_osc_duty_cyle.setSliderPosition(0)
+        self.q_osc_duty_cyle.setOrientation(Qt.Qt.Horizontal)
+        # Units are millionth of the full range available
+        self.q_osc_duty_cyle.setMinimum(0)
+        self.q_osc_duty_cyle.setMaximum(1e6)
+
+        self.q_osc_duty_cyle.setSingleStep(1e6/100./3.)
+        self.q_osc_duty_cyle.setPageStep(1e6/10.)
+        # Put all the widgets into a grid layout
+        grid = QtGui.QGridLayout()
+        grid.addWidget(self.qlbl_osc_freq, 0, 0)
+        grid.addWidget(self.qedit_osc_freq, 0, 1)
+        grid.addWidget(self.qbtn_osc, 1, 0, 1, 2)
+        grid.addWidget(self.qchk_osc_polarity, 2, 0, 1, 2)
+        grid.addWidget(self.q_osc_duty_cyle, 3, 0, 1, 2)
+        self.qgroupbox_test_osc.setLayout(grid)
+
         
-        # Spacer which takes up the rest of the space:
-        spacerItem = QtGui.QSpacerItem(1, 1, QtGui.QSizePolicy.Maximum, QtGui.QSizePolicy.Expanding)
+
         
         # Put all the widgets into a grid layout
         grid = QtGui.QGridLayout()
@@ -478,6 +515,10 @@ class DisplayVNAWindow(QtGui.QWidget):
         vbox = Qt.QVBoxLayout()
         vbox.addWidget(self.qgroupbox_vna)
         vbox.addWidget(self.qgroupbox_dither)
+        # vbox.addWidget(self.qgroupbox_test_osc)
+
+        # Spacer which takes up the rest of the space:
+        spacerItem = QtGui.QSpacerItem(1, 1, QtGui.QSizePolicy.Maximum, QtGui.QSizePolicy.Expanding)
         vbox.addItem(spacerItem)
 
         self.setLayout(vbox)
@@ -500,6 +541,13 @@ class DisplayVNAWindow(QtGui.QWidget):
         self.move(QtGui.QDesktopWidget().availableGeometry().topLeft() + Qt.QPoint(50, 50))
         
 
-        
-        
-        
+    def oscClicked(self):
+        print("oscClicked")
+        #def setTestOscillator(self, bEnable=1, bPolarity=1, oscillator_modulus, oscillator_modulus_active)
+
+        oscillator_modulus = int(round(  self.sl.fs/float(self.qedit_osc_freq.text()) ))
+        oscillator_modulus_active = int(round(  oscillator_modulus * float(self.q_osc_duty_cyle.value()/1e6) ))
+
+        print("self.q_osc_duty_cyle.value()")
+        self.sl.setTestOscillator(int(self.qbtn_osc.isChecked()), int(not self.qchk_osc_polarity.isChecked()), oscillator_modulus, oscillator_modulus_active)
+
