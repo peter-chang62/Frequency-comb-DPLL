@@ -384,7 +384,7 @@ class LoopFiltersUI(Qt.QWidget):
 		except:
 			fmax = 10e6
 			
-		gain_min = -30
+		gain_min = -60
 		gain_max = 100
 			
 		return (kp, fi, fii, fd, fdf, fmin, fmax, gain_min, gain_max, bLock)
