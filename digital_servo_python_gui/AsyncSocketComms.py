@@ -11,26 +11,27 @@ import select
 import time
 import logging
 
+
 class AsyncSocketServer():
-    
+
     def __init__(self, port_number=50000, bStartListening=True):
         self.port_number = port_number
         self.sock_conn = None
         self.sock_server = None
         self.read_buffer = bytearray()
-        
+
         self.bVerbose = False
-        
+
         self.logger = logging.getLogger(__name__)
         self.logger_name = 'AsyncSocketServer'
-        
+
         if bStartListening:
             self.startListening()
-        
+
     def startListening(self):
         # Initialization part: starts listening on the two ports
         print('AsyncSocketServer.startListening(): Creating server socket...')
-        HOST = ''       # means local host
+        HOST = ''  # means local host
 
         self.sock_server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.sock_server.setblocking(0)
@@ -47,7 +48,7 @@ class AsyncSocketServer():
         if self.bVerbose:
             print('AsyncSocketServer.run(): First')
         ready_to_read = select.select([self.sock_server], [], [], 0)[0]
-        
+
         if ready_to_read:
             (sock_conn, addr) = self.sock_server.accept()
             sock_conn.setblocking(0)
@@ -55,7 +56,7 @@ class AsyncSocketServer():
             self.conn_addr = addr
             if self.bVerbose:
                 print('Accepted connection from %s' % str(addr))
-        
+
         # Second: try to read from the socket:
         # We need a try/catch around these lines as the socket could have been closed in the meantime (or any number of possible errors):
         if self.bVerbose:
@@ -75,28 +76,28 @@ class AsyncSocketServer():
                 print('AsyncSocketServer.run(): Read generated an exception')
                 self.logger.warning('{}: Read generated an exception'.format(self.logger_name))
                 print(e)
-#                self.sock_conn.close() # this can also throw an exception:
+                #                self.sock_conn.close() # this can also throw an exception:
                 self.sock_conn = None
-#                raise
-            
+        #                raise
+
         if not bParseBufferIntoLines:
             return
 
         # default option: parse the receive buffer into separate lines:
-        self.read_buffer = self.read_buffer.decode("utf-8") #bytes -> str
-        delim='\n'
+        self.read_buffer = self.read_buffer.decode("utf-8")  # bytes -> str
+        delim = '\n'
         line = None
         while self.read_buffer.find(delim) != -1:
             line, self.read_buffer = self.read_buffer.split('\n', 1)
-        self.read_buffer = self.read_buffer.encode("utf-8") # str => bytes
-        
+        self.read_buffer = self.read_buffer.encode("utf-8")  # str => bytes
+
         # if we have a valid line, this is what we output:
         return line
-        
+
     def readdata_async(self, sock, read_buffer):
         if self.bVerbose:
             print('readdata_async: entering')
-        recv_buffer=4096
+        recv_buffer = 4096
         data = True
         while data:
             # Check if there is data:
@@ -111,12 +112,12 @@ class AsyncSocketServer():
                         print('socket close detected')
                         print('readdata_async: exiting')
                     return (read_buffer, False)
-                    
+
                 read_buffer += data
-#                 print('read buffer: %s' % read_buffer)
+            #                 print('read buffer: %s' % read_buffer)
             else:
                 break
-            
+
         if self.bVerbose:
             print('readdata_async: exiting')
         return (read_buffer, True)
@@ -124,24 +125,25 @@ class AsyncSocketServer():
     def close(self):
         self.sock_server.close()
 
+
 class AsyncSocketClient():
-    
+
     def __init__(self, PORT=50000):
-        HOST = 'localhost'    # means local host
+        HOST = 'localhost'  # means local host
         self.PORT = PORT
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.sock.connect((HOST, self.PORT))
 
         self.logger = logging.getLogger(__name__)
         self.logger_name = 'AsyncSocketClient'
-        
+
     def send_text(self, txt_to_send):
-        if type(txt_to_send)!=str:
+        if type(txt_to_send) != str:
             print('Error, txt_to_send is not a str')
             self.logger.warning('{}: Trying to send a non-string text'.format(self.logger_name))
             return
-        
+
         self.sock.send(txt_to_send.encode('utf-8'))
 
     def close(self):
-        self.sock.close()        
+        self.sock.close()
