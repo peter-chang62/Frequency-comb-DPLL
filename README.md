@@ -1,30 +1,112 @@
-Digital Phase-locked-loop for Locking a Frequency Comb using a Red Pitaya
----------------------------
+# FNC-100 Quick Start
 
-The firmware/software allows the use of this hardware to phaselock a frequency comb. More generally, together with the hardware, it provides a digital control box that can support a dual-channel phase-locked loop including the front-end IQ detection of the input rf signals. While this digital control box could therefore be used to phase lock other systems, the discussion below assumes the user is operating a frequency comb.
+# Hardware Setup
 
+## Power and Network
 
+Required connections:
 
-Getting started
----------------------------
-1. Download the required files from the "Releases section" (https://github.com/jddes/Frequency-comb-DPLL/releases/latest):
-	a. The full source code repository to have access to the Python GUI, and b. The SD card image for the Red Pitaya (red_pitaya_dpll_2017-05-31.zip)
-2. Read and follow the "Instructions and operation manual for RedPitaya DPLL.pdf" file.
+- Ethernet to router with DHCP
+- 5 V power supply
+- 7 V power supply
+- USB 5 V power (for control interface)
+- Control PC on the same network
 
-Software versions
----------------------------
-Required Python distribution is WinPython-64bit-3.7.2 (https://sourceforge.net/projects/winpython/files/WinPython_3.7/3.7.2.0/).
-The FPGA Vivado project was compiled in Vivado 2015.4, but simply using the software doesn't require installing Vivado.
+Connection order:
 
+1.  Power the router.
+2.  Connect Ethernet between router and FNC‑100.
+3.  Connect all power supplies.
 
-Additional information
----------------------------
-Additional information can be obtained from the instructions manual of the NIST digital control box (https://www.nist.gov/services-resources/software/fpga-based-digital-control-box-phase-stabilization-frequency-comb).  The Red Pitaya digital phase-locked loop is based on this software and thus shares many of the same functionality with some differences.
-Some other information is included in the slides for the CLEO 2017 presentation associated with this project (Slides_CLEO2017_JDD.pptx) and in the Review of Scientific Instruments article on the frequency comb (http://www.nist.gov/manuscript-publication-search.cfm?pub_id=918079), which contains information about the NIST digital control box version of the digital PLL.
+## Power Supply Notes
 
+- Internal fans must run for proper cooling.
+- Do not operate the unit with only some power supplies connected.
+- Power connectors differ:
 
-Disclaimer
----------------------------
-This is not a commercial product, this is a research tool so there are some “rough edges” and limited documentation, if you need support you can contact me at (octosigconsulting at gmail.com) – although I cannot guarantee that I will answer quickly all the questions, but I will do my best to do so.
-This software was built starting from two existing code bases: the NIST digital control box software for most of the FPGA firmware and all the Python code, and a part of the Red Pitaya software for the Zynq embedded software and FPGA firmware.  Both the NIST and the Red Pitaya code were released in the public domain with a specific license, both placed in the subfolder "Licenses".
+| Supply  | Connector       |
+|---------|-----------------|
+| 5 V     | 2.1 mm barrel   |
+| 7 V     | 2.5 mm barrel   |
 
+The connectors are intentionally different to avoid mix‑ups.
+
+## RF Connections
+
+Each channel uses the same topology and shares a common reference clock.
+
+Typical path:
+
+- Reference oscillator → FNC‑100 ref input
+- Photodetector → channel RF input
+- Channel RF output → RF power amplifier → AOM
+
+Optional but recommended:
+
+- BPF or LPF filtering in RF paths
+
+Channels 2, 3, and 4 follow the same wiring as Channel 1.
+
+## Practical Tips
+
+- Use an SMA torque wrench or 5/16 in wrench for easier connector access.
+- If using only two channels, prefer **channels 1 and 3** to reduce spurs.
+
+# Software Setup
+
+## Requirements
+
+Install:
+
+- WinPython64 3.7.2: [Download link on Sourceforge](https://sourceforge.net/projects/winpython/files/WinPython_3.7/3.7.2.0/Winpython64-3.7.2.0.exe/download)
+- Control software repository (**Important, select the `4Ch-counter` branch**): [Github link](https://github.com/jddes/Frequency-comb-DPLL/tree/4Ch-counter)
+
+## Launching the GUI
+
+Open a WinPython console and navigate inside the repository:
+
+```shell
+cd Frequency-comb-DPLL/digital_servo_python_gui
+```
+
+Then start the program:
+
+```shell
+python main.py
+```
+
+## Connecting to the Device
+
+1.  Enter the device IP address manually, or use auto‑discovery.
+2.  Click **Connect to device**.
+3.  Open the **Config** tab once connected.
+
+## Device Configuration
+
+Inside the **Config** tab:
+
+1.  Enter the correct **reference frequency**.
+2.  Configure settings for each active channel.
+3.  Click **Commit settings to device**.
+
+The **Summary** tab displays all four channels simultaneously.
+
+## Phase Lock
+
+Inside a channel tab:
+
+Enable **Lock phase** to align the measured phase with the X‑axis.
+
+# Minimal Startup Checklist
+
+1.  Router powered with DHCP.
+2.  Ethernet connected to the FNC‑100.
+3.  All power supplies connected.
+4.  Reference oscillator connected.
+5.  RF input/output connected for active channels.
+6.  Install WinPython.
+7.  Launch the GUI (`main.py`).
+8.  Connect to the device.
+9.  Enter reference frequency and channel parameters.
+10. Commit settings.
+11. Enable phase lock if required.
