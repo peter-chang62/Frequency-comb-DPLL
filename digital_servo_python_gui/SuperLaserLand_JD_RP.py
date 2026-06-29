@@ -968,25 +968,26 @@ class SuperLaserLand_JD_RP:
 
 
 class phaseReadoutDriver():
+    ADDRESS_WIDTH = 13 # constant from registers_read.vhd, must match
+    ram_size = 2**ADDRESS_WIDTH
+    sync_bytes = 0xABCD12340A0B0C0D # from mux_phase_to_logger.vhd
+    data_dtype = np.dtype([
+                        ('sync_bytes', np.uint64),
+                        ('timestamp',  np.uint64),
+                        ('phi1',       np.int64),
+                        ('phi2',       np.int64),
+                        ('phi3',       np.int64),
+                        ('phi4',       np.int64),
+                        ])
+    bytes_per_word = 4 # 32-bits words at readout
+    words_per_chunk = int(data_dtype.itemsize/bytes_per_word)
+    number_of_chunks = int(np.floor(ram_size/words_per_chunk))
+
     def __init__(self, sl):
         """ sl must be a SuperLaserLand_JD_RP() instance """
         self.sl = sl
         # constants, etc
         self.bDisplayTiming = False
-        self.ADDRESS_WIDTH = 13 # constant from registers_read.vhd, must match
-        self.ram_size = 2**self.ADDRESS_WIDTH
-        self.sync_bytes = 0xABCD12340A0B0C0D # from mux_phase_to_logger.vhd
-        self.data_dtype = np.dtype([
-                            ('sync_bytes', np.uint64),
-                            ('timestamp',  np.uint64),
-                            ('phi1',       np.int64),
-                            ('phi2',       np.int64),
-                            ('phi3',       np.int64),
-                            ('phi4',       np.int64),
-                            ])
-        self.bytes_per_word = 4 # 32-bits words at readout
-        self.words_per_chunk = int(self.data_dtype.itemsize/self.bytes_per_word)
-        self.number_of_chunks = int(np.floor(self.ram_size/self.words_per_chunk))
 
         # create member variables that will hold internal state
         self.last_chunk_id = -1

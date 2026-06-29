@@ -23,6 +23,7 @@ import config_widget
 import controller_settings_widget
 import checkboxes_collection_widget
 from udp_ramp_listener import UDPRampListener
+from mock_hardware import MockRP_PLL_device
 
 from common import tictoc, colorCoding, readFloatFromTextbox, getExtClkColorName
 import bin_conv
@@ -50,6 +51,8 @@ class MainWidget(QtWidgets.QMainWindow):
     def __init__(self, parent=None):
         super().__init__(parent)
         
+        self.mock_mode = '--mock' in sys.argv
+
         self.bDisplayTiming = False
         self.tictoc_last = time.perf_counter()
         self.config = dict()
@@ -66,6 +69,8 @@ class MainWidget(QtWidgets.QMainWindow):
             self.pts_settings[channel_index] = {"autorefresh": True, "pts_IQ": 100, "pts_ADC": 100}
 
         self.sl = SuperLaserLand_JD_RP.SuperLaserLand_JD_RP()
+        if self.mock_mode:
+            self.sl.dev = MockRP_PLL_device()
         self.config_done = False # we don't read out values from the device until the config is done, because we need to know all the relevant configuration values to do the post-processing needed
         self.udp_ramp_listener = UDPRampListener(port=7654)
 
@@ -142,7 +147,10 @@ class MainWidget(QtWidgets.QMainWindow):
             w.spinDDSpower_valueChanged(w.spinDDSpower.value())
 
         self.tab_widget.currentChanged.connect(self.updateTabVisibility)
-        self.setWindowTitle('FNC-100 Digital PLL/Frequency counter/phase meter')
+        title = 'FNC-100 Digital PLL/Frequency counter/phase meter'
+        if self.mock_mode:
+            title += '  [DEMO MODE — no hardware]'
+        self.setWindowTitle(title)
 
         self.enableOrDisableWidgetsRequiringConnection(False)
         self.createStatusBar()
@@ -235,11 +243,15 @@ class MainWidget(QtWidgets.QMainWindow):
             self.connection_widget.btnConnect.setText('Connect to device')
         else:
             # attempt to establish connection to selected device
-            (strMAC, strIP, port) = self.connection_widget.getSelectedHost()
+            if self.mock_mode:
+                strIP = 'demo'
+                port  = 0
+            else:
+                (strMAC, strIP, port) = self.connection_widget.getSelectedHost()
+
             if strIP is None:
                 bConnect = False
                 self.connection_widget.btnConnect.setChecked(False)
-
                 self.setStatus('connection', 'No IP selected', 'bad')
             else:
                 self.sl.dev.OpenTCPConnection(strIP, port)
@@ -257,7 +269,10 @@ class MainWidget(QtWidgets.QMainWindow):
 
                     self.sl.phaseReadoutDriver.startLogging()
                     self.connection_widget.btnConnect.setText('Disconnect from device')
-                    self.setStatus('connection', 'Connected to %s' % strIP, 'ok')
+                    if self.mock_mode:
+                        self.setStatus('connection', 'Connected (DEMO MODE — no hardware)', 'ok')
+                    else:
+                        self.setStatus('connection', 'Connected to %s' % strIP, 'ok')
 
                 else:
                     bConnect = False
@@ -276,7 +291,7 @@ class MainWidget(QtWidgets.QMainWindow):
             self.tab_widget.setTabEnabled(index, bEnable and self.validDeviceAndConfigKnown())
 
         for w in [self.connection_widget.btnUpdateFPGA, self.connection_widget.btnUpdateCPU]:
-            w.setEnabled(not bEnable)
+            w.setEnabled(not bEnable and not self.mock_mode)
 
     def commit(self):
         """ Read all the settings from the GUI to our config dict, then push to device """

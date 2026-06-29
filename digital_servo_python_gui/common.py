@@ -16,12 +16,16 @@ def bitmask(Nbits):
 
 def round_to_N_sig_figs(x, Nsigfigs):
     """ Returns x rounded to Nsigfigs significant figures """
+    if x == 0:
+        return 0
     leading_pos = np.floor(np.log10(np.abs(x)))
     factor = 10**((Nsigfigs-1)-leading_pos)
     return np.round(x * factor)/factor
 
 def show_N_sig_figs(x, Nsigfigs):
     """ Returns a string representing the value x with Nsigfigs significant figures """
+    if x == 0:
+        return "0"
     leading_pos = np.floor(np.log10(np.abs(x)))
     decimals = max(0, Nsigfigs - (leading_pos+1))
     format_str = "{:.%df}" % decimals
@@ -31,6 +35,10 @@ def show_N_sig_figs(x, Nsigfigs):
 def freq_text_eng_format(freq, Nsigfigs=2):
     """ Returns the text in engineering format (ie using Hz, kHz or MHz units)
     for a given frequency in Hz """
+    if freq == 0:
+        return "0 Hz"
+    if freq < 0:
+        return "-" + freq_text_eng_format(-freq, Nsigfigs)
     if freq >= 1e6:
         text = show_N_sig_figs(freq/1e6, Nsigfigs) + " MHz"
     elif freq >= 1e3:

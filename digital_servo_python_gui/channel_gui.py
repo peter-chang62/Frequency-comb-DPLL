@@ -375,6 +375,8 @@ class ChannelGUI(QtWidgets.QWidget):
         # average power in input signal is thus A**2/2/Z = mean_amplitude**2/2/Z
         impedance = 50
         mean_power_W = mean_amplitude**2/2/impedance
+        if mean_power_W <= 0:
+            return
         mean_power_dBm = 10*np.log10(mean_power_W * 1e3)
         if time.perf_counter() - self.last_amplitude_update >= 0.3: # limit updates so that the text is actually readable
             self.last_amplitude_update = time.perf_counter()
