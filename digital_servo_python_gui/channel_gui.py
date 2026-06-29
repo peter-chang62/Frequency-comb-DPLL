@@ -89,6 +89,12 @@ class ChannelGUI(QtWidgets.QWidget):
                 self.lblRamp.setText(freq_text_eng_format(d["ramp_rate_Hz_per_s"]))
             else:
                 self.lblRamp.setText("Off")
+
+        if d["type"] == "ramp_update" and d["channel_id"] == self.channel_id:
+            if d["ramp_enable"]:
+                self.lblRamp.setText(freq_text_eng_format(d["ramp_rate_Hz_per_s"]))
+            else:
+                self.lblRamp.setText("Off")
             
         if d["type"] == "system":
             self.system_settings = dict(d)

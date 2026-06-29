@@ -46,6 +46,9 @@ class ConfigWidget(QtWidgets.QWidget):
             cw.editModulatorNominalFreq.editingFinished.connect(partial(self.updateExpectedFreq, channel_id))
             cw.editModulatorGain.editingFinished.connect(       partial(self.updateExpectedFreq, channel_id))
 
+            adv_per_channel.chkRamp.toggled.connect(partial(self._update_ramp_udp_enabled, channel_id))
+            self._update_ramp_udp_enabled(channel_id, adv_per_channel.chkRamp.isChecked())
+
             # widgets in advanced settings, per channel
             for w in [adv_per_channel.chkEnableLO,
                       adv_per_channel.editTargetIF,
@@ -56,6 +59,7 @@ class ConfigWidget(QtWidgets.QWidget):
                       adv_per_channel.chkEnableDDS,
                       adv_per_channel.chkRamp,
                       adv_per_channel.editRamp,
+                      adv_per_channel.chkRampUDP,
                       self.editRefFreq,
                       self.editExpectedFreq_dict[channel_id]] + cw.openloop_widgets + cw.closedloop_widgets:
                 if isinstance(w, QtWidgets.QAbstractButton):
@@ -130,6 +134,14 @@ class ConfigWidget(QtWidgets.QWidget):
         else:
             self.sig_set_status.emit("config", "Config file neither loaded nor saved", "bad")
 
+    def _update_ramp_udp_enabled(self, channel_id, checked):
+        adv = self.adv_per_channel[channel_id]
+        adv.chkRampUDP.setEnabled(checked)
+        adv.editRampUDP.setEnabled(checked)
+
+    def set_udp_ramp_rate(self, channel_id, rate):
+        self.adv_per_channel[channel_id].editRampUDP.setText(str(rate))
+
     def newSettings(self, d):
         if d["type"] == "LO":
             self.adv_per_channel[d["channel_id"]].lblChosenLO.setText(d["chosen_LO_text"])
@@ -158,8 +170,10 @@ class ConfigWidget(QtWidgets.QWidget):
                 c["upper_sideband"]    = adv_settings.radioUpper.isChecked()
                 c["LO_pwr"]            = adv_settings.comboLOpower.currentText()
                 c["LO_enable"]         = adv_settings.chkEnableLO.isChecked()
-                c["ramp_enable"]       = adv_settings.chkRamp.isChecked()
+                c["ramp_enable"]        = adv_settings.chkRamp.isChecked()
                 c["ramp_rate_Hz_per_s"] = readFloatFromTextbox(adv_settings.editRamp)
+                if c["ramp_enable"] and adv_settings.chkRampUDP.isChecked():
+                    c["ramp_rate_Hz_per_s"] += readFloatFromTextbox(adv_settings.editRampUDP)
 
                 c["mode"] = "counter" # this might get changed later on
                 if self.bHasDDS:

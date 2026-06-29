@@ -22,6 +22,7 @@ import connection_widget
 import config_widget
 import controller_settings_widget
 import checkboxes_collection_widget
+from udp_ramp_listener import UDPRampListener
 
 from common import tictoc, colorCoding, readFloatFromTextbox, getExtClkColorName
 import bin_conv
@@ -66,6 +67,7 @@ class MainWidget(QtWidgets.QMainWindow):
 
         self.sl = SuperLaserLand_JD_RP.SuperLaserLand_JD_RP()
         self.config_done = False # we don't read out values from the device until the config is done, because we need to know all the relevant configuration values to do the post-processing needed
+        self.udp_ramp_listener = UDPRampListener(port=7654)
 
         self.fastTimer = QtCore.QTimer(self)
         self.fastTimer.timeout.connect(self.fastTimerEvent)
@@ -539,11 +541,38 @@ class MainWidget(QtWidgets.QMainWindow):
         else:
             colorCoding(self.config_widget.editRefFreq, "bad")
 
+    def _poll_udp_ramp_socket(self):
+        updates = self.udp_ramp_listener.drain()
+        if not updates:
+            return
+        for channel_id, rate in updates:
+            self.config_widget.set_udp_ramp_rate(channel_id, rate)
+        self._apply_ramp_updates()
+
+    def _apply_ramp_updates(self):
+        """ Push only the ramp registers to the hardware, using the current GUI state.
+        Called after a UDP ramp update arrives; avoids the full pushSettingsToDevice() overhead. """
+        if not self.validDeviceAndConfigKnown():
+            return
+        try:
+            (_, channels_settings) = self.config_widget.readConfigFromGUI()
+        except (ValueError, SyntaxError):
+            return
+        self.setup_ddc_ramps(channels_settings)
+        for channel_id, cs in channels_settings.items():
+            self.sig_new_settings.emit({
+                "type": "ramp_update",
+                "channel_id": channel_id,
+                "ramp_enable": cs["ramp_enable"],
+                "ramp_rate_Hz_per_s": cs["ramp_rate_Hz_per_s"],
+            })
+
     def slowTimerEvent(self):
         """ Reads the slow phase streaming data (100 phase samples/seconds nominal, read every counter gate period).
         Current limitation of the way we do things is that the max counter period is related with
         the filling of the circular buffer inside the FPGA.  Exact value is TBD, but probably good up to 10 secs.
         This function also computes the frequency offset from said phase data, and emits the result as a signal """
+        self._poll_udp_ramp_socket()
         if not self.sl.dev.valid_socket:
             return
         self.updateExtClkFreq()
