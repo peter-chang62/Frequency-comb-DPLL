@@ -1,2 +1,6 @@
+generate ip output products:
+
 reset_target all [get_files *.bd]
 generate_target all [get_files *.bd]
+
+for implementation on RP board, use strategy: Performance_ExplorePostRoutePhysOpt
