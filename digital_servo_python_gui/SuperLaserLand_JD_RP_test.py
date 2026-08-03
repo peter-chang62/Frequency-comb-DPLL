@@ -26,9 +26,32 @@ def test_setup_writes_various():
 
     for (func, expected_selector) in test_list:
         func(Num_samples)
-        
+
         assert(sl.last_selector == expected_selector)
         assert(sl.Num_samples_read == Num_samples)
 
         Num_samples = Num_samples + 1
+
+
+def test_ddc_phase_direct_select_register_bits():
+    sl = SuperLaserLand_mock()
+
+    captured = []
+    sl.send_bus_cmd_16bits = lambda addr, val: captured.append((addr, val))
+
+    # Default: phase_direct_select not passed -> bits 4 and 5 stay clear.
+    sl.set_ddc_filter(0, filter_select=0, angle_select=0)
+    assert(captured[-2][1] & (1 << 4) == 0)
+    sl.set_ddc_filter(1, filter_select=0, angle_select=0)
+    assert(captured[-2][1] & (1 << 5) == 0)
+
+    # Channel 0 phase-direct bit (bit 4).
+    sl.set_ddc_filter(0, filter_select=0, angle_select=0, phase_direct_select=1)
+    assert(captured[-2][1] & (1 << 4) != 0)
+    assert(sl.ddc0_phase_direct_select == 1)
+
+    # Channel 1 phase-direct bit (bit 5).
+    sl.set_ddc_filter(1, filter_select=0, angle_select=0, phase_direct_select=1)
+    assert(captured[-2][1] & (1 << 5) != 0)
+    assert(sl.ddc1_phase_direct_select == 1)
 

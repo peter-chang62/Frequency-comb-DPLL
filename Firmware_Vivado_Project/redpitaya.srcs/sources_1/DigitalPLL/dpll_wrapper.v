@@ -542,7 +542,7 @@ wire        [9:0]       inst_frequency0;        // diff(phi)/(2*pi) * 2**10
 wire [10-1+12:0]    inst_frequency0_filtered;       // this is the output of a boxcar filter on the inst_frequency signal, before sending to the DDR2 logger
 wire [10-1+2:0] inst_frequency0_filtered_small; // overall filter gain is only equal to its length (4) so we don't really need all the bits
 wire [1:0] ddc0_filter_select, ddc1_filter_select;
-wire select_phase_or_freq0, select_phase_or_freq1;
+wire ddc0_phase_direct_select, ddc1_phase_direct_select;
 wire [3:0] angleSelect_0, angleSelect_1;
 
    parallel_bus_register_64_bits_or_less # (
@@ -581,7 +581,7 @@ wire [3:0] angleSelect_0, angleSelect_1;
          .bus_strobe(cmd_trig), 
          .bus_address(cmd_addr), 
          .bus_data({cmd_data2in, cmd_data1in}), 
-         .register_output({select_phase_or_freq1, select_phase_or_freq0, ddc1_filter_select, ddc0_filter_select}), 
+         .register_output({ddc1_phase_direct_select, ddc0_phase_direct_select, ddc1_filter_select, ddc0_filter_select}),
          .update_flag()
          );
      
@@ -765,10 +765,13 @@ parallel_bus_register_mux_pll1  (
  .update_flag                   (                           )
 );
 
+wire [9:0] pll1_loop_filter_freq_or_phase_in0;
+assign pll1_loop_filter_freq_or_phase_in0 = ddc1_phase_direct_select ? wrapped_phase1 : DDC1_output;
+
 multiplexer_3to1_async loop_filters_1_mux (
  .clk                               (clk1                       ),
  .selector_mux                      (loop_filter_1_mux_selector ),
- .in0_mux                           (DDC1_output                ), 
+ .in0_mux                           (pll1_loop_filter_freq_or_phase_in0 ),
  .in1_mux                           (inst_frequency0            ),
  .in2_mux                           (pll0_output >> 5           ), //pll0_output is 15 bits and in2_mux is 10 bits
  .out_mux                           (inst_frequency1            )
@@ -933,18 +936,21 @@ parallel_bus_register_pll0_coefdfilter (
 assign pll0_gain_changed = pll0_gain_changedp | pll0_gain_changedi | pll0_gain_changedii | pll0_gain_changedd | pll0_coef_changedd;
      
 // Finally the PLL itself:
+wire [9:0] pll0_loop_filter_data_in;
+assign pll0_loop_filter_data_in = ddc0_phase_direct_select ? wrapped_phase0 : inst_frequency0;
+
 PLL_loop_filters_with_saturation # (
     .N_DIVIDE_P(24-11),  // changed 2017-05-02 by JDD from 24 to 24-11 to recenter gain for RedPitaya connected to a laser with 8e8 Hz/V of VCO gain and 20 kHz of 1st order cutoff
-    .N_DIVIDE_I(24), 
+    .N_DIVIDE_I(24),
     .N_DIVIDE_II(35),
     .N_DIVIDE_D(0),
     .N_OUTPUT(16)
 )
 PLL0_loop_filters (
-    .clk(clk1), 
-    .lock(pll0_lock), 
-    .gain_changed(pll0_gain_changed), 
-    .data_in(inst_frequency0), 
+    .clk(clk1),
+    .lock(pll0_lock),
+    .gain_changed(pll0_gain_changed),
+    .data_in(pll0_loop_filter_data_in),
     .gain_p(pll0_gainp), 
     .gain_i(pll0_gaini), 
     .gain_ii(pll0_gainii),
@@ -1568,7 +1574,7 @@ assign modulation_output_to_dac2 = vna_output_to_dac2;  // we didn't bother addi
 //      .data_delay(residuals_data_delay),
 //     .boxcar_filter_size(residuals_boxcar_filter_size), 
 //     .phase_residuals(phase_residuals0), 
-//      .select_phase_or_freq(select_phase_or_freq0),
+//      .select_phase_or_freq(ddc0_phase_direct_select),
 //      .freq_residuals(inst_frequency0),
 //     .data_output_to_fifo(residuals_streaming_data1), 
 //     .output_clk_enable(residuals_streaming_write1)
@@ -1586,7 +1592,7 @@ assign modulation_output_to_dac2 = vna_output_to_dac2;  // we didn't bother addi
 //     .boxcar_filter_size(residuals_boxcar_filter_size), 
 //     .phase_residuals(phase_residuals1), 
 // //   .phase_residuals(32'd10), 
-//      .select_phase_or_freq(select_phase_or_freq1),
+//      .select_phase_or_freq(ddc1_phase_direct_select),
 //      .freq_residuals(inst_frequency1),
      
 //     .data_output_to_fifo(residuals_streaming_data2),  // For debugging: put a constant value in data2:

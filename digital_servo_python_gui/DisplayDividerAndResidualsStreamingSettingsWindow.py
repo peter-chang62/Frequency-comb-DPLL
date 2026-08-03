@@ -85,10 +85,32 @@ class DisplayDividerAndResidualsStreamingSettingsWindow(QtWidgets.QWidget):
 		elif angle_select_0 == 4:
 			self.qchk_inphase_lsb0.setChecked(True)
 
+		# Phase_direct_select is a newer key -- guard against older saved config
+		# files (in the repo or already on a user's machine) that predate it.
+		try:
+			phase_direct_select_1 = int(self.sp.getValue('Phase_direct_select', "DAC1"))
+		except AttributeError:
+			phase_direct_select_1 = 0
+
+		if phase_direct_select_1 == 1:
+			self.qchk_phase1.setChecked(True)
+		else:
+			self.qchk_freq1.setChecked(True)
+
+		try:
+			phase_direct_select_0 = int(self.sp.getValue('Phase_direct_select', "DAC0"))
+		except AttributeError:
+			phase_direct_select_0 = 0
+
+		if phase_direct_select_0 == 1:
+			self.qchk_phase0.setChecked(True)
+		else:
+			self.qchk_freq0.setChecked(True)
+
 	@logCommsErrorsAndBreakoutOfFunction()
 	def getValues(self):
-		#Get filter_select(0, 1 or 2) for both adc
-		(filter_select_1, filter_select_0) = self.sl.get_ddc_filter_select()
+		#Get filter_select(0, 1 or 2) and phase_direct_select (0 or 1) for both adc
+		(filter_select_1, filter_select_0, phase_direct_select_1, phase_direct_select_0) = self.sl.get_ddc_filter_select()
 		#Check correspoding radio button
 		if filter_select_1 == 0:
 			self.qchk_Wideband1.setChecked(True)
@@ -103,6 +125,16 @@ class DisplayDividerAndResidualsStreamingSettingsWindow(QtWidgets.QWidget):
 			self.qchk_Narrowband0.setChecked(True)
 		elif filter_select_0 == 2:
 			self.qchk_WidebandFIR0.setChecked(True)
+
+		if phase_direct_select_1 == 1:
+			self.qchk_phase1.setChecked(True)
+		else:
+			self.qchk_freq1.setChecked(True)
+
+		if phase_direct_select_0 == 1:
+			self.qchk_phase0.setChecked(True)
+		else:
+			self.qchk_freq0.setChecked(True)
 
 		#Get angle_select (0, 1, 2, 3 or 4) for both adc
 		(angle_select_1, angle_select_0) = self.sl.get_ddc_angle_select()
@@ -149,9 +181,14 @@ class DisplayDividerAndResidualsStreamingSettingsWindow(QtWidgets.QWidget):
 			angle_select = 3
 		elif self.qchk_inphase_lsb0.isChecked():
 			angle_select = 4
-		self.sl.set_ddc_filter(adc_number, filter_select, angle_select)
-		
-		
+
+		if self.qchk_phase0.isChecked():
+			phase_direct_select = 1
+		else:
+			phase_direct_select = 0
+		self.sl.set_ddc_filter(adc_number, filter_select, angle_select, phase_direct_select)
+
+
 		adc_number = 1
 		if self.qchk_Wideband1.isChecked():
 			filter_select = 0
@@ -170,7 +207,12 @@ class DisplayDividerAndResidualsStreamingSettingsWindow(QtWidgets.QWidget):
 			angle_select = 3
 		elif self.qchk_inphase_lsb1.isChecked():
 			angle_select = 4
-		self.sl.set_ddc_filter(adc_number, filter_select, angle_select)
+
+		if self.qchk_phase1.isChecked():
+			phase_direct_select = 1
+		else:
+			phase_direct_select = 0
+		self.sl.set_ddc_filter(adc_number, filter_select, angle_select, phase_direct_select)
 		 
 	def initUI(self):		
 		######################################################################
@@ -220,7 +262,21 @@ class DisplayDividerAndResidualsStreamingSettingsWindow(QtWidgets.QWidget):
 		self.qchk_quadrature_lsb0.clicked.connect(self.ddcClicked)
 		self.qchk_inphase_msb0.clicked.connect(self.ddcClicked)
 		self.qchk_inphase_lsb0.clicked.connect(self.ddcClicked)
-		
+
+		# DDC0 loop filter input: frequency (default) or phase direct-feed
+		self.qlbl_ddc0phase = Qt.QLabel('DDC 0 loop filter input:')
+		self.qchk_freq0 = Qt.QRadioButton('Frequency')
+		self.qchk_phase0 = Qt.QRadioButton('Phase')
+		self.qddc0_phase_group = Qt.QButtonGroup(self)
+		self.qddc0_phase_group.addButton(self.qchk_freq0)
+		self.qddc0_phase_group.addButton(self.qchk_phase0)
+
+		self.qchk_freq0.setChecked(True)
+		self.qchk_phase0.setChecked(False)
+
+		self.qchk_freq0.clicked.connect(self.ddcClicked)
+		self.qchk_phase0.clicked.connect(self.ddcClicked)
+
 		# Wideband/narrowband DDC1:
 		self.qlbl_ddc1 = Qt.QLabel('DDC 1 filter BW:')
 		self.qchk_Wideband1 = Qt.QRadioButton('Wideband (31 MHz)')
@@ -262,9 +318,21 @@ class DisplayDividerAndResidualsStreamingSettingsWindow(QtWidgets.QWidget):
 		self.qchk_quadrature_lsb1.clicked.connect(self.ddcClicked)
 		self.qchk_inphase_msb1.clicked.connect(self.ddcClicked)
 		self.qchk_inphase_lsb1.clicked.connect(self.ddcClicked)
-		
-		
-		
+
+		# DDC1 loop filter input: frequency (default) or phase direct-feed
+		self.qlbl_ddc1phase = Qt.QLabel('DDC 1 loop filter input:')
+		self.qchk_freq1 = Qt.QRadioButton('Frequency')
+		self.qchk_phase1 = Qt.QRadioButton('Phase')
+		self.qddc1_phase_group = Qt.QButtonGroup(self)
+		self.qddc1_phase_group.addButton(self.qchk_freq1)
+		self.qddc1_phase_group.addButton(self.qchk_phase1)
+
+		self.qchk_freq1.setChecked(True)
+		self.qchk_phase1.setChecked(False)
+
+		self.qchk_freq1.clicked.connect(self.ddcClicked)
+		self.qchk_phase1.clicked.connect(self.ddcClicked)
+
 		# Put all the widgets into a grid layout
 		grid = QtWidgets.QGridLayout()
 		
@@ -282,20 +350,28 @@ class DisplayDividerAndResidualsStreamingSettingsWindow(QtWidgets.QWidget):
 		grid.addWidget(self.qchk_inphase_msb0,        2, 2)
 		grid.addWidget(self.qchk_inphase_lsb0,        2, 3)
 
-		grid.addWidget(self.qlbl_ddc1,                3, 0)
-		grid.addWidget(self.qchk_Wideband1,           3, 1)
-		grid.addWidget(self.qchk_Narrowband1,         3, 2)
-		grid.addWidget(self.qchk_WidebandFIR1,        3, 3)
-		
+		grid.addWidget(self.qlbl_ddc0phase,           3, 0)
+		grid.addWidget(self.qchk_freq0,               3, 2)
+		grid.addWidget(self.qchk_phase0,              3, 3)
+
+		grid.addWidget(self.qlbl_ddc1,                4, 0)
+		grid.addWidget(self.qchk_Wideband1,           4, 1)
+		grid.addWidget(self.qchk_Narrowband1,         4, 2)
+		grid.addWidget(self.qchk_WidebandFIR1,        4, 3)
+
 		#FEATURE
-		grid.addWidget(self.qlbl_ddc1angle,           4, 0)
-		grid.addWidget(self.qchk_cordic1,             4, 1)
-		grid.addWidget(self.qchk_quadrature_msb1,     4, 2)
-		grid.addWidget(self.qchk_quadrature_lsb1,     4, 3)
-		grid.addWidget(self.qchk_inphase_msb1,        5, 2)
-		grid.addWidget(self.qchk_inphase_lsb1,        5, 3)
-		
-		self.qgroupbox_ddc.setLayout(grid)        
+		grid.addWidget(self.qlbl_ddc1angle,           5, 0)
+		grid.addWidget(self.qchk_cordic1,             5, 1)
+		grid.addWidget(self.qchk_quadrature_msb1,     5, 2)
+		grid.addWidget(self.qchk_quadrature_lsb1,     5, 3)
+		grid.addWidget(self.qchk_inphase_msb1,        6, 2)
+		grid.addWidget(self.qchk_inphase_lsb1,        6, 3)
+
+		grid.addWidget(self.qlbl_ddc1phase,           7, 0)
+		grid.addWidget(self.qchk_freq1,               7, 2)
+		grid.addWidget(self.qchk_phase1,              7, 3)
+
+		self.qgroupbox_ddc.setLayout(grid)
 		
 		
 

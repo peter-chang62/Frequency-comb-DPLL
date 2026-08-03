@@ -326,8 +326,8 @@ class SuperLaserLand_JD_RP:
 		self.ddc1_filter_select = 0
 		self.ddc0_angle_select = 0
 		self.ddc1_angle_select = 0
-		self.residuals0_phase_or_freq = 0
-		self.residuals1_phase_or_freq = 0
+		self.ddc0_phase_direct_select = 0
+		self.ddc1_phase_direct_select = 0
 		if controller is not None:
 			self.controller = weakref.proxy(controller)
 		else:
@@ -1786,34 +1786,36 @@ class SuperLaserLand_JD_RP:
 		elif output_number == 1:
 			return (freq_counter1_sample, time_axis, dac0_samples, dac1_samples, dac2_samples)
 		
-	def set_ddc_filter(self, adc_number, filter_select, angle_select = 0):
+	def set_ddc_filter(self, adc_number, filter_select, angle_select = 0, phase_direct_select = 0):
 		if self.bVerbose == True:
 			print('set_ddc_filter')
-			
-		
+
+
 		if adc_number == 0:
 			self.ddc0_filter_select = filter_select
 			self.ddc0_angle_select = angle_select
+			self.ddc0_phase_direct_select = phase_direct_select
 		elif adc_number == 1:
 			self.ddc1_filter_select = filter_select
 			self.ddc1_angle_select = angle_select
-			
+			self.ddc1_phase_direct_select = phase_direct_select
+
 		self.set_ddc_filter_select_register()
-		
+
 	def set_ddc_filter_select_register(self):
 		if self.bVerbose == True:
 			print('set_ddc_filter_select_register')
 
-			
+
 		# takes the internal states and dumps them to the fpga:
-		register_value = self.ddc0_filter_select + (self.ddc1_filter_select<<2) + (self.residuals0_phase_or_freq<<4) + (self.residuals1_phase_or_freq<<5)
+		register_value = self.ddc0_filter_select + (self.ddc1_filter_select<<2) + (self.ddc0_phase_direct_select<<4) + (self.ddc1_phase_direct_select<<5)
 		self.send_bus_cmd_16bits(self.BUS_ADDR_ddc_filter_select, register_value)
 		#print('set_ddc_filter_select_register: FILTER_SELECT %d' % register_value)
-		
-		register_value = self.ddc0_angle_select + (self.ddc1_angle_select<<4) 
+
+		register_value = self.ddc0_angle_select + (self.ddc1_angle_select<<4)
 		self.send_bus_cmd_16bits(self.BUS_ADDR_ddc_angle_select, register_value)
 		#print('set_ddc_filter_select_register: ANGLE_SELECT %d' % register_value)
-		
+
 	def get_ddc_filter_select(self):
 		if self.bVerbose == True:
 			print('get_ddc_filter_select')
@@ -1821,8 +1823,10 @@ class SuperLaserLand_JD_RP:
 		data = self.read_RAM_dpll_wrapper(self.BUS_ADDR_ddc_filter_select)
 		self.ddc0_filter_select = (data   ) & int('11', 2)
 		self.ddc1_filter_select = (data>>2) & int('11', 2)
+		self.ddc0_phase_direct_select = (data>>4) & 1
+		self.ddc1_phase_direct_select = (data>>5) & 1
 
-		return (self.ddc1_filter_select, self.ddc0_filter_select)
+		return (self.ddc1_filter_select, self.ddc0_filter_select, self.ddc1_phase_direct_select, self.ddc0_phase_direct_select)
 
 	def get_ddc_angle_select(self):
 		if self.bVerbose == True:
