@@ -262,3 +262,68 @@ design. A purpose-built direct-phase-fed design (§5's "hypothetical"
 scenario, retuned gains) would eliminate the far-from-lock oscillation risk
 entirely, at the cost of needing some other explicit way to trim out any
 DC offset on that channel.
+
+## 9. `ddc0/1_phase_direct_select` — §5's "hypothetical" is now real, and it puts a sharp edge on the `angleSelect` choice
+
+Commit `19e98a9` ("Add DDC phase-direct-feed option for PLL0/PLL1 loop
+filters") repurposed a previously-dead register pair
+(`select_phase_or_freq0/1`, register `0x8002` bits 4-5, renamed
+`ddc0/1_phase_direct_select`) into exactly §5's "hypothetical" case: when set,
+the PLL loop filter is fed `wrapped_phase` **directly**, skipping the
+differencing step entirely, instead of `inst_frequency`. Exposed in the GUI
+(`DisplayDividerAndResidualsStreamingSettingsWindow.py`) as a
+"Frequency"/"Phase" radio-button pair per channel (`qchk_freq0/phase0`,
+`qchk_freq1/phase1`), default "Frequency" (bit clear) so existing
+configs/behavior are unchanged until a user opts in.
+
+In `dpll_wrapper.v`, the two channels bypass differently:
+- **Channel 0**: `pll0_loop_filter_data_in = ddc0_phase_direct_select ?
+  wrapped_phase0 : inst_frequency0`, feeding `PLL0_loop_filters.data_in`
+  directly — a clean, isolated substitution.
+- **Channel 1**: the substitution happens one level upstream, inside
+  `loop_filters_1_mux`'s `in0_mux` branch (register `0x9000` selector,
+  default `0` = this branch). Its output, `inst_frequency1`, isn't private to
+  `PLL1_loop_filters` the way channel 0's wire is — it also feeds the
+  channel-1 frequency-counter readback (`dual_type_frequency_counter_inst1`)
+  and, via `dac2_error_computation_inst`, the DAC2 acquisition-FLL
+  (`acquisition_FLL_dac2_1`). So enabling Phase mode on **channel 1**
+  silently substitutes `wrapped_phase1` into those two other consumers as
+  well, not just the loop filter — worth knowing if either the frequency
+  counter reading or the DAC2 acquisition loop looks wrong while channel 1 is
+  in Phase mode.
+
+**Why this reopens §7's wraparound discussion**: §7 explained why
+differencing wrapped_phase is safe (fixed-width two's-complement subtraction
+self-cancels the wrap). Phase-direct mode removes that differencing step, so
+that protection no longer applies — the raw `wrapped_phase` value (with
+whatever discontinuity, or lack thereof, `angleSelect` gives it) now lands
+directly in `PLL_loop_filters_with_saturation`'s own P/I/I² branches, whose I
+and I² accumulators are much wider than the 10-bit input (`PLL0_loop_filters
+gain_ii` accumulator alone is `N_OUTPUT+N_DIVIDE_II` bits). A raw
+same-width-subtraction wrap cancels for free (§7); a wrap value **summed
+into** a much-wider accumulator does not — it registers as a genuine,
+non-self-erasing disturbance.
+
+This makes the `angleSelect` choice materially safety-relevant for Phase
+mode, reusing §2's MSB/LSB distinction:
+
+| `angleSelect` | Safe to combine with Phase mode? |
+|---|---|
+| **CORDIC** (default) | **No** — guaranteed sawtooth wrap every time phase crosses ±π, fed straight into the integrator every occurrence. |
+| **Quadrature MSB** / **In-Phase MSB** (`quantizer.vhd`) | **No** — no saturation clamp; wraps in two's complement on amplitude overrange (§2), same failure mode as CORDIC, just amplitude- rather than phase-triggered. |
+| **Quadrature LSB** / **In-Phase LSB** (`limiter.vhd`) | **Yes, from a wrap standpoint** — verified hard-clamping, never wraps under any input amplitude. Proportional to `sin(θ)`/`cos(θ)` (§3), so this is the configuration that genuinely matches a classic analog mixer-fed phase detector. |
+
+So: **Phase mode should only be paired with `Quadrature LSB` or `In-Phase
+LSB`**, never CORDIC or the MSB variants, to avoid the wrap-into-integrator
+hazard. Note this doesn't make I/Q Phase mode unconditionally safe, though:
+§7's oscillating/sign-flipping-away-from-lock behavior (`dI/dt =
+-A·sin(θ)·dθ/dt`) still applies exactly as described there — I/Q modes
+remain a *local, small-signal* phase-error proxy near the intended lock
+point, not a general acquisition-range detector, whether or not the signal
+is pre-differenced. Combined with §5's point that phase-fed branches take
+their literal PID meaning (P proportional-to-phase, I integral-of-phase,
+etc.) rather than the frequency-referred roles the existing gains were tuned
+for, Phase mode should be bench-verified at reduced loop-filter gain before
+trusting it at full bandwidth — exactly the caveat the feature's own
+`claude-sessions/2026-08-03-phase-direct-feed/plan.md`/`report.md` already
+carry, not a new restriction.
