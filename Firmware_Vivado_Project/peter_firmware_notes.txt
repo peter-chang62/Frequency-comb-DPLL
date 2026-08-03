@@ -1,0 +1,2 @@
+reset_target all [get_files *.bd]
+generate_target all [get_files *.bd]
