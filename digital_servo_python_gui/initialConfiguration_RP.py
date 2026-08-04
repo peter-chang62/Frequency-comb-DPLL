@@ -234,6 +234,7 @@ class initialConfiguration(QtWidgets.QDialog):
 		# disconnect:
 		self.dev.sock.shutdown(socket.SHUT_RDWR)
 		self.dev.sock.close()
+		self.dev.CloseTCPConnection()
 		print("Disconnected from remote host.")
 
 	def reset_list_and_send_broadcast(self):
@@ -413,6 +414,7 @@ class initialConfiguration(QtWidgets.QDialog):
 		# disconnect:
 		self.dev.sock.shutdown(socket.SHUT_RDWR)
 		self.dev.sock.close()
+		self.dev.CloseTCPConnection()
 		print("Disconnected from remote host.  You can now reconnect to the updated host.")
 		
 		
@@ -439,6 +441,7 @@ class initialConfiguration(QtWidgets.QDialog):
 		self.dev.send_reboot_command()
 		self.dev.sock.shutdown(socket.SHUT_RDWR)
 		self.dev.sock.close()
+		self.dev.CloseTCPConnection()
 		
 		time.sleep(1) # give some time for tcp server to come back up
 		print("CPU software update complete.")
