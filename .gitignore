@@ -15,3 +15,9 @@ digital_servo_python_gui/freq_out.bin
 *.pb
 *.bin
 xvhdl.log
+
+# Obsidian
+.obsidian/
+
+# macOS
+.DS_Store
