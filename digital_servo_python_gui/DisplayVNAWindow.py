@@ -126,7 +126,10 @@ class DisplayVNAWindow(QtWidgets.QWidget):
         
         ## Scale the transfer function to physical units:
         # Current units are (VNA input counts)/(VNA output counts)
-        output_volts_per_counts = self.sl.convertDACCountsToVolts(self.qcombo_transfer_output.currentIndex(), 1)
+        # Must use getDACGainInVoltsPerCounts(), not convertDACCountsToVolts(..., 1): DAC2's counts<->volts
+        # conversion is affine (offset binary, counts 0..65535 -> -1V..+1V) on the standalone build, so
+        # converting a single count no longer yields a slope. Numerically identical for DAC0/DAC1.
+        output_volts_per_counts = self.sl.getDACGainInVoltsPerCounts(self.qcombo_transfer_output.currentIndex())
         print('output_volts_per_counts = %s' % output_volts_per_counts)
         
         
@@ -289,6 +292,9 @@ class DisplayVNAWindow(QtWidgets.QWidget):
 #        self.qcombo_transfer_input.setSizePolicy(QtWidgets.QSizePolicy.Maximum, QtWidgets.QSizePolicy.Fixed)
         
         # Output select
+        # Note: these labels are internal DAC datapath indices (0/1/2), not the SMA connector
+        # labels used elsewhere in the GUI (SMA DAC0/SMA DAC1) -- the combo index is passed
+        # straight through as the internal DAC index, so it is deliberately left unrenamed here.
         transfer_output_label = Qt.QLabel('Output:')
         self.qcombo_transfer_output = Qt.QComboBox()
         self.qcombo_transfer_output.addItems(['DAC 0', 'DAC 1', 'DAC 2'])

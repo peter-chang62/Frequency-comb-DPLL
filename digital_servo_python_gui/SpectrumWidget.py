@@ -99,26 +99,30 @@ class SpectrumWidget(QtWidgets.QWidget):
         self.N_dacs = 3
         self.qthermo_dac_current = [ThermometerWidget() for k in range(self.N_dacs)]
         self.update_dac_thermo_scales()
+        # User-visible names for the three internal DAC datapaths. Internal indices stay 0/1/2 (they address
+        # the FPGA register map), but on the standalone Red Pitaya build DAC1 comes out of SMA DAC0 and DAC2
+        # out of SMA DAC1. Index 0 is only reachable from the CEO lock tab, which is disabled in this build,
+        # and is deliberately NOT labeled "SMA DAC0" to avoid colliding with the SMA connector naming used
+        # for indices 1/2 above.
+        dac_display_names = ['DAC0 (retired)', 'SMA DAC0', 'SMA DAC1']
         for k in range(self.N_dacs):
             if self.output_controls[k] == True:
-                self.qlabel_dac_current[k] = Qt.QLabel('Output\nDAC %d [V]' % k)
+                self.qlabel_dac_current[k] = Qt.QLabel('Output\n%s [V]' % dac_display_names[k])
                 self.qlabel_dac_current[k].setAlignment(Qt.Qt.AlignHCenter)
-                
+
                 #self.qthermo_dac_current[k].setOrientation(Qt.Qt.Vertical, Qwt.QwtThermo.LeftScale)
                 self.qthermo_dac_current[k].setValue(int(0))
                 #self.qthermo_dac_current[k].setFillBrush(Qt.QBrush(Qt.QColor(0, 186, 52)))
                 self.qthermo_dac_current[k].setFillColor(Qt.QColor(0, 186, 52))
-                if k == 2:
-                    ticksListMajor = [0, 1, 2, 3]
-                    ticksListMinor = [0.5, 1.5, 2.5]
-                else:
-                    ticksListMajor = [-1, -0.5, 0, 0.5, 1]
-                    ticksListMinor = [-0.75, -0.25, 0.25, 0.75]
+                # DAC2 is now +/-1V offset binary on the SMA output (same as DAC0/DAC1), so all three
+                # DACs share the same tick scale here.
+                ticksListMajor = [-1, -0.5, 0, 0.5, 1]
+                ticksListMinor = [-0.75, -0.25, 0.25, 0.75]
                 ticksLabelMajor = list(map(str, ticksListMajor))
                 self.qthermo_dac_current[k].setTicks(ticksListMajor, ticksListMinor, ticksLabelMajor)
-                
-                
-                self.qlabel_dac_offset[k] = Qt.QLabel('Offset\nDAC %d [V]' % k)
+
+
+                self.qlabel_dac_offset[k] = Qt.QLabel('Offset\n%s [V]' % dac_display_names[k])
                 self.qlabel_dac_offset[k].setAlignment(Qt.Qt.AlignHCenter)
                 
                 self.q_dac_offset[k] = Qt.QSlider()
@@ -153,6 +157,10 @@ class SpectrumWidget(QtWidgets.QWidget):
         # Input select        
         self.qlabel_adc_plot_input = Qt.QLabel('Input:')
         self.qcombo_adc_plot = Qt.QComboBox()
+        # NOTE: these are raw firmware-datapath selectors, not the standalone-build's SMA output labels.
+        # SuperLaserLand_JD_RP.scaleADCorDACDataToVolts() parses the trailing digit back out via
+        # int(input_select[3]) and keys into LOGGER_MUX, so these strings must not be renamed to
+        # "SMA DAC0"/"SMA DAC1" even though the optical lock's physical outputs were renamed elsewhere.
         self.qcombo_adc_plot.addItems(['ADC0', 'ADC1', 'DAC0', 'DAC1', 'DAC2'])
         self.qcombo_adc_plot.setCurrentIndex(self.selected_ADC)
         

@@ -226,8 +226,8 @@ class LoopFiltersUI_DAC1_and_DAC2(Qt.QWidget):
             self.qlabel_int1_gain.setText('Acquisition BW: %.3f Hz' % ((closedloop_BW)))
             
         # Predict the closed-loop BW based on the chosen gain:
-        # Second case: integrator 2, which integrates the DAC 1 output and outputs a signal on DAC2 HV.
-        # The plant model in this case has a DC gain equal to the ratio of the VCO gain seen at DAC2 HV / VCO gain seen at DAC 1 HV:
+        # Second case: integrator 2, which integrates the DAC 1 output (SMA DAC0) and outputs a signal on DAC2 (SMA DAC1).
+        # The plant model in this case has a DC gain equal to the ratio of the VCO gain seen at DAC2 (SMA DAC1) / VCO gain seen at DAC 1 (SMA DAC0):
         
         # Gain of the integrator as a function of frequency is 2^gain1_in_bits * self.sl.fs /(2*pi*f)
         # We want the unity gain frequency where G_integrator*Kc = 1 = Kc*2^gain1_in_bits * self.sl.fs /(2*pi*f)
@@ -348,7 +348,9 @@ class LoopFiltersUI_DAC1_and_DAC2(Qt.QWidget):
         self.qcombo_int2_gain.setCurrentIndex(32-17)    # this has to be overridden if we load the register settings (TODO)
         self.qcombo_int2_gain.currentIndexChanged.connect(self.setIntegratorGainEvent)
         
-        self.qgroupbox_integrators = Qt.QGroupBox('Slow PZT (DAC2)')
+        # Internal DAC1/DAC2 come out of SMA DAC0/SMA DAC1 on the standalone build, hence the
+        # display labels below reference SMA connector names rather than internal DAC indices.
+        self.qgroupbox_integrators = Qt.QGroupBox('Slow PZT (SMA DAC1)')
         
         vbox_int = Qt.QVBoxLayout()
         vbox_int.addWidget(self.qlbl_acquisition)
@@ -362,7 +364,7 @@ class LoopFiltersUI_DAC1_and_DAC2(Qt.QWidget):
         self.qgroupbox_integrators.setLayout(vbox_int)
         
         # The controls for the fast PZT's loop filter settings, contains only one (composite) widget:
-        self.qgroupbox_pll = Qt.QGroupBox('Fast PZT (DAC1)', self)
+        self.qgroupbox_pll = Qt.QGroupBox('Fast PZT (SMA DAC0)', self)
 #        self.dac1_ui.setParent(self.qgroupbox_pll)
         vbox3 = Qt.QVBoxLayout()
         vbox3.addWidget(self.dac1_ui)

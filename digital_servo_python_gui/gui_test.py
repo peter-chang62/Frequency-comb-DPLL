@@ -642,8 +642,12 @@ def inner_test_displayDAC(sl, gui_mainwindow, bCheckValues=True):
         expected_labels = ["0.0004 V\n0 MHz", "", ""]
     else:
         gui_mainwindow.sl.random_seed = 1
-        expected_dacs = [0, 460e-6+2e-4, 1.254e-3]
-        expected_labels = ["", "0.0007 V\n1 MHz", "0.0013 V\n1 MHz"]
+        # DAC2 re-baselined for the standalone-Red-Pitaya build. The mock's DAC2 reading is ~24.9
+        # counts; on the old 0-3.3V unipolar SPI DAC that was 1.254e-3 V, but DAC2 now drives the
+        # SMA output as offset binary (counts 0..65535 -> -1V..+1V), so ~25 counts out of 65535 is
+        # essentially the negative rail: (24.9 - 32768)/32768 = -0.99924 V.
+        expected_dacs = [0, 460e-6+2e-4, -0.9992399215698242]
+        expected_labels = ["", "0.0007 V\n1 MHz", "-0.9992 V\n-999 MHz"]
 
     gui_mainwindow.displayDAC()
 

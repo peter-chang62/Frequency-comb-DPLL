@@ -747,7 +747,8 @@ class XEM_GUI_MainWindow(QtWidgets.QWidget):
 			
 		else:
 			# Optical lock
-			self.qlabel_vco_gain = Qt.QLabel('VCO Gains (DAC1, DAC2HV) [Hz/V]:')
+			# renamed for the standalone-Red-Pitaya build: internal DAC1/DAC2 now come out of SMA DAC0/DAC1
+			self.qlabel_vco_gain = Qt.QLabel('VCO Gains (SMA DAC0, SMA DAC1) [Hz/V]:')
 			# self.qlabel_vco_gain = Qt.QLabel('VCO Gain (DAC1) [Hz/V]:')
 			
 			self.qlabel_detected_vco_gain_label = Qt.QLabel('Detected VCO Gain [Hz/V]:')
@@ -1404,7 +1405,7 @@ class XEM_GUI_MainWindow(QtWidgets.QWidget):
 				# For the USB bug, compute the mean from the last points     
 				current_output_in_volts = self.sl.convertDACCountsToVolts(k, np.mean(samples_out[128:256]))
 				current_output_in_hz = current_output_in_volts * VCO_gain_in_Hz_per_Volts
-				self.spectrum.qthermo_dac_current[k].setValue(int(current_output_in_volts))
+				self.spectrum.qthermo_dac_current[k].setValue(current_output_in_volts)
 				self.spectrum.qlabel_dac_current_value[k].setText('{:.4f} V\n{:.0f} MHz'.format(current_output_in_volts, current_output_in_hz/1e6))
 				
 				elapsed_time = time.perf_counter() - start_time

@@ -104,8 +104,15 @@ def test_setVCOGain_event():
     assert(xem_gui_mainwindow.spectrum.q_dac_offset[0].singleStep() == 83332)
     assert(xem_gui_mainwindow.spectrum.q_dac_offset[1].pageStep() == 2500)
     assert(xem_gui_mainwindow.spectrum.q_dac_offset[1].singleStep() == 83)
-    assert(xem_gui_mainwindow.spectrum.q_dac_offset[2].pageStep() == 1515)
-    assert(xem_gui_mainwindow.spectrum.q_dac_offset[2].singleStep() == 51)
+    # DAC2 re-baselined for the standalone-Red-Pitaya build. The slider steps are inversely
+    # proportional to getDACGainInVoltsPerCounts(2), which went from 3.3/65535 (old 0-3.3V
+    # unipolar SPI DAC) to 1.0/32768 (SMA output, offset binary), i.e. a factor of
+    # 3.3*32768/65535 = 1.650033, so the old 1515/51 become 2500/83.
+    # These now match DAC1's 2500/83 exactly, which is the real check: DAC1 and DAC2 are both
+    # +/-1V SMA outputs with the same counts-per-volt and the same 65535-count span, so their
+    # slider steps must agree.
+    assert(xem_gui_mainwindow.spectrum.q_dac_offset[2].pageStep() == 2500)
+    assert(xem_gui_mainwindow.spectrum.q_dac_offset[2].singleStep() == 83)
 
 # @pytest.mark.skiptest
 def test_setVCOGain_event_exception():
@@ -209,7 +216,12 @@ def test_getVCOGain():
     assert( xem_gui_mainwindow.spectrum.q_dac_offset[2].pageStep() == 313)
 
     assert( xem_gui_mainwindow.qedit_vco_gain[1].text() == '4.0e+09' )
-    assert( xem_gui_mainwindow.qedit_vco_gain[2].text() == '4.8e+09' )
+    # DAC2 re-baselined for the standalone-Red-Pitaya build: the detected VCO gain is
+    # counts_per_counts / (freq_discriminator_gain * getDACGainInVoltsPerCounts(2)), so it scales
+    # by 3.3*32768/65535 = 1.650033 now that DAC2 reads +/-1V on the SMA instead of 0-3.3V.
+    # The step-size asserts above are unchanged because the detected gain appears in their
+    # denominator too, so the two factors of 1.650033 cancel.
+    assert( xem_gui_mainwindow.qedit_vco_gain[2].text() == '8.0e+09' )
 
     for k in [1, 2]:
         print("xem_gui_mainwindow.spectrum.q_dac_offset[%d].setSingleStep(small_step) = %f" % (k, xem_gui_mainwindow.spectrum.q_dac_offset[k].singleStep()))

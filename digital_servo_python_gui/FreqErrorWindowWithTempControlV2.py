@@ -140,6 +140,7 @@ class FreqErrorWindowWithTempControlV2(QtWidgets.QWidget):
         # print("FreqErrorWindowWithTempControlV2::killTimers(): %s" % self.strTitle)
         if self.timerID is not None:
             self.killTimer(self.timerID)
+            self.timerID = None
 
     def openTCPConnection(self):
         start_time = time.perf_counter()
@@ -305,11 +306,12 @@ class FreqErrorWindowWithTempControlV2(QtWidgets.QWidget):
         self.qedit_unlock_thresh = Qt.QLineEdit('0.05')
         self.qedit_unlock_thresh.setMaximumWidth(40)
 
-        if self.output_number == 1: 
+        if self.output_number == 1:
             # We add a checkBox to plot the DAC1 and/or DAC2
-            self.qchk_show_DAC1 = Qt.QCheckBox('DAC1')
+            # renamed for the standalone-Red-Pitaya build: internal DAC1/DAC2 now come out of SMA DAC0/DAC1
+            self.qchk_show_DAC1 = Qt.QCheckBox('SMA DAC0')
             self.qchk_show_DAC1.setChecked(True)
-            self.qchk_show_DAC2 = Qt.QCheckBox('DAC2')
+            self.qchk_show_DAC2 = Qt.QCheckBox('SMA DAC1')
             self.qchk_show_DAC2.setChecked(True)
 
         
@@ -679,7 +681,9 @@ class FreqErrorWindowWithTempControlV2(QtWidgets.QWidget):
                 self.output_files['DAC1'].write(DAC1_output)
                 
             if DAC2_output is not None:
-                DAC2_output_voltage = DAC2_output/float(self.sl.DACs_limit_high[2] - self.sl.DACs_limit_low[2])*2.
+                # DAC2 is unsigned offset binary on the standalone build (counts 0..65535 -> -1V..+1V),
+                # so the affine conversion is required; a bare slope would read +1V high.
+                DAC2_output_voltage = self.sl.convertDACCountsToVolts(2, DAC2_output)
                 # Scale to minimum and maximum limits: 0 means minimum, 1 means maximum
                 DAC2_output = (DAC2_output - self.sl.DACs_limit_low[2]).astype(np.float)/float(self.sl.DACs_limit_high[2] - self.sl.DACs_limit_low[2])
                 # Write data to disk:
@@ -780,7 +784,8 @@ class FreqErrorWindowWithTempControlV2(QtWidgets.QWidget):
                     
                     self.curve_dac_uthrsh.setData(self.time_history_dacs[self.bValid_dacs] - self.time_history_dacs[len(self.time_history_dacs)-1], self.DAC_mean_history[self.bValid_dacs]+self.DAC_thrsh_history[self.bValid_dacs])
                     self.curve_dac_lthrsh.setData(self.time_history_dacs[self.bValid_dacs] - self.time_history_dacs[len(self.time_history_dacs)-1], self.DAC_mean_history[self.bValid_dacs]-self.DAC_thrsh_history[self.bValid_dacs])
-                    self.qplt_dac.setTitle('%s Lock DAC outputs, last raw code DAC1= %f (%f), DAC2 = %f (%f)' % (channelName, self.DAC_history[-1], DAC1_output_voltage, self.DAC2_history[-1], DAC2_output_voltage))
+                    # renamed for the standalone-Red-Pitaya build: internal DAC1/DAC2 now come out of SMA DAC0/DAC1
+                    self.qplt_dac.setTitle('%s Lock DAC outputs, last raw code SMA DAC0= %f (%f), SMA DAC1 = %f (%f)' % (channelName, self.DAC_history[-1], DAC1_output_voltage, self.DAC2_history[-1], DAC2_output_voltage))
                 
                 if self.qchk_fullscale_dac.isChecked():
                     #self.qplt_dac.setAxisScaleEngine(Qwt.QwtPlot.yLeft, Qwt.QwtLinearScaleEngine())

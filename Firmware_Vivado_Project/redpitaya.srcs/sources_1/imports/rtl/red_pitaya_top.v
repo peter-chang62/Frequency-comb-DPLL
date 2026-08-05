@@ -857,10 +857,18 @@ IOBUF i_iobufn [8-1:0] (.O(exp_n_in), .IO(exp_n_io), .I(exp_n_out), .T(~exp_n_di
 wire signed [14-1 : 0] to_DAC0;
 wire signed [14-1 : 0] to_DAC1;
 
+// Daughterboard removal / DAC remap (standalone board, SMA-only outputs):
+// PLL0/DACout0 is retired and has no physical output anymore (left unconnected here).
+// DACout1 (optical-lock fast output) now drives SMA DAC0.
+// DACout2 (optical-lock slow output) now drives SMA DAC1; DACout2 is unsigned
+// (0..65535, still also fed to max5541_spi_dac_interface for the off-board SPI DAC)
+// so it is converted to offset-binary signed here to span the full -1V..+1V SMA range.
+wire signed [15:0] DACout2_signed = {~DACout2[15], DACout2[14:0]};  // 0..65535 unsigned -> -32768..32767 signed
+
 mux_internal_vco mux_vco (
   .clk            ( adc_clk                   ), // clock
-  .DACin0         ( DACout0                   ), // output of the DPLL channel a
-  .DACin1         ( DACout1                   ), // output of the DPLL channel b
+  .DACin0         ( DACout1                   ), // optical-lock fast output -> SMA DAC0
+  .DACin1         ( DACout2_signed            ), // optical-lock slow output -> SMA DAC1
   // internal configuration bus
   .sys_addr       ( sys_addr                  ), // address
   .sys_wdata      ( sys_wdata                 ), // write data

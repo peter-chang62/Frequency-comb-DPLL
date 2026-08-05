@@ -192,6 +192,18 @@ class controller(object):
 		tabs.addTab(self.xem_gui_mainwindow2, "Optical Lock")
 		tabs.addTab(self.counters_window, "Counters")
 		tabs.addTab(self.settings_window, "Settings")
+
+		# renamed for the standalone-Red-Pitaya build: internal DAC0/PLL0 (CEO lock)
+		# no longer reaches a physical output now that DACout1->SMA DAC0 and
+		# DACout2->SMA DAC1 rerouting is in the firmware, so disable this tab.
+		ceo_tab_index = tabs.indexOf(self.xem_gui_mainwindow)
+		tabs.setTabText(ceo_tab_index, "CEO Lock (disabled)")
+		tabs.setTabEnabled(ceo_tab_index, False)
+		tabs.setTabToolTip(ceo_tab_index, "Disabled: DAC0 is no longer routed to a physical output in this standalone-Red-Pitaya build.")
+		tabs.setCurrentWidget(self.xem_gui_mainwindow2)
+
+		self.killRetiredCEOTimers()
+
 		box = QtWidgets.QHBoxLayout()
 		box.addWidget(tabs)
 		self.main_windows.setLayout(box)
@@ -333,9 +345,11 @@ class controller(object):
 
 		for window in target_windows:
 			window.pushDefaultValues()
-		
+
 
 		self.setTemperatureControlPort(strSelectedSerial)
+
+		self.killRetiredCEOTimers()
 
 	def getActualValues(self, strSelectedSerial, ip_addr = "192.168.0.150", port=5000):
 
@@ -376,6 +390,8 @@ class controller(object):
 
 		self.setTemperatureControlPort(strSelectedSerial)
 
+		self.killRetiredCEOTimers()
+
 	def pushActualValues(self, strSelectedSerial, ip_addr = "192.168.0.150", port=5000):
 		self.strSelectedSerial = strSelectedSerial
 		self.ip_addr           = ip_addr
@@ -402,6 +418,21 @@ class controller(object):
 
 
 		self.setTemperatureControlPort(strSelectedSerial)
+
+		self.killRetiredCEOTimers()
+
+	def killRetiredCEOTimers(self):
+		# PLL0/DAC0 (CEO lock) is retired on the standalone-Red-Pitaya build: DACout0 no longer
+		# reaches a physical output, and its tab is disabled. Stop these windows' timers so the
+		# retired subsystem stops polling the FPGA and writing counter logs to disk.
+		# Must be re-applied after every pushDefaultValues/getValues/pushActualValues, because
+		# each of those calls startTimers() on the windows again.
+		try:
+			self.xem_gui_mainwindow.killTimers()
+			self.freq_error_window1.killTimers()
+		except Exception as e:
+			print("Error while killing the retired CEO lock timers:")
+			print(e)
 
 	def stopCommunication(self):
 

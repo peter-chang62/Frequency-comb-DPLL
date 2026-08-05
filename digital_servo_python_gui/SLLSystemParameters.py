@@ -29,11 +29,13 @@ class SLLSystemParameters():
         
         # Default values for all the parameters:
         self.root.append(ET.Element('Reference_frequency', DDC0='31.25e6', DDC1='31.25e6'))
-        self.root.append(ET.Element('VCO gain', DAC0='2e8', DAC1='0.5e6', DAC2='9e6'))
-        self.root.append(ET.Element('Output_limits_low', DAC0='-1.0', DAC1='-0', DAC2='0'))
-        self.root.append(ET.Element('Output_limits_high', DAC0='1.0', DAC1='1', DAC2='55'))
+        # DAC2 VCO gain (9e6) was calibrated for the old 0-55V daughterboard HV drive; it must be re-measured
+        # now that DAC2 drives the Red Pitaya's own +/-1V SMA output directly.
+        self.root.append(ET.Element('VCO_gain', DAC0='2e8', DAC1='0.5e6', DAC2='9e6'))
+        self.root.append(ET.Element('Output_limits_low', DAC0='-1.0', DAC1='-0', DAC2='-1.0'))
+        self.root.append(ET.Element('Output_limits_high', DAC0='1.0', DAC1='1', DAC2='1.0'))
         self.root.append(ET.Element('Input_Output_gain', ADC0='1', ADC1='1', DAC0='1', DAC1='1'))
-        self.root.append(ET.Element('Output_offset_in_volts', DAC0='0.0274', DAC1='0', DAC2='27'))
+        self.root.append(ET.Element('Output_offset_in_volts', DAC0='0.0274', DAC1='0', DAC2='0'))
         self.root.append(ET.Element('PLL0_settings', kp='10', fi='45e3', fii='3.4e3', fd='1', fdf='1', chkKd='False', chkKp='False', chkLock='False', chkKpCrossing='False'))
         self.root.append(ET.Element('PLL1_settings', kp='-5.6', fi='141e3', fii='3.24e3', fd='1', fdf='1', chkKd='False', chkKp='True', chkLock='False', chkKpCrossing='True'))
 #        self.root.append(ET.Element('PLL2_settings', kp='-120', fi='1e-2', fii='0', fd='1', fdf='1', chkKd='False', chkKp='False', chkLock='False', chkKpCrossing='False'))

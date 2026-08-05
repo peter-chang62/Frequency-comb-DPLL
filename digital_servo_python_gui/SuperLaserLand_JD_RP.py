@@ -44,7 +44,7 @@ class SuperLaserLand_JD_RP:
 	ADC1_gain = 1. #  * 31.65/25.35  # calibrated one particular RP unit against a scope, not sure if it will improve cal of others or not. JDD 2020-11-07
 	DAC0_gain = 1
 	DAC1_gain = 1
-	DAC2_gain = 2
+	DAC2_gain = 2 # unused
 	DACs_limit_low = [-2**15, -2**15, 0]
 	DACs_limit_high = [2**15-1, 2**15-1, 2**16-1]
 	DACs_offset = [2**14, 2**14, -2**15]
@@ -65,7 +65,11 @@ class SuperLaserLand_JD_RP:
 	dither_mode_auto = [1, 1, 1] # 1 means automatic (on when lock is off, off when lock is on), 0 means manual
 	lock_read = [0, 0, 0]
 	# Hardware-specific values that won't change unless we port the code to a different hardware platform or modify the hardware itself
-	Vref_DAC2 = 3.3
+	# Previously (off-board 16-bit SPI DAC + daughterboard HV amp): DAC2 counts 0..65535 mapped to 0..Vref_DAC2 (3.3V) unipolar.
+	# Current hardware: DAC2's 16-bit unsigned datapath is routed to the Red Pitaya's own SMA output, which spans
+	# -1V..+1V via offset binary (counts 0 -> -1V, 32768 -> 0V, 65535 -> +1V).
+	DAC2_fullscale_volts = 1.0   # SMA output spans -1V..+1V; the 16-bit unsigned DAC2 datapath maps 0..65535 onto that range (offset binary)
+	DAC2_midscale_counts = 2**15
 	
 	# Values for the residuals streaming core (not currently implemented on the RedPitaya DPLL):
 	residuals_trigger_delay = 10
@@ -1286,7 +1290,7 @@ class SuperLaserLand_JD_RP:
 		elif DAC_number == 1:
 			return counts/(2.**15.-1) * 1 * self.DAC1_gain
 		elif DAC_number == 2:
-			return_value = counts/(2.**16-1) * self.Vref_DAC2
+			return_value = (counts - self.DAC2_midscale_counts) / float(self.DAC2_midscale_counts) * self.DAC2_fullscale_volts
 			return return_value
 			
 		return 0
@@ -1306,7 +1310,7 @@ class SuperLaserLand_JD_RP:
 #            return_value = (float(voltage)/55 * 2.**19.) - (2**19-1)
 #            return_value = (float(voltage)/55 * (2.**20.-1)) - (2**19-1)
 #            return_value = ((float(voltage)/12./10.) * (2.**20.-1))
-			return_value = float(voltage)/(self.Vref_DAC2) * (2**16-1)
+			return_value = float(voltage)/self.DAC2_fullscale_volts * self.DAC2_midscale_counts + self.DAC2_midscale_counts
 			
 			
 #        if return_value == 0:
@@ -1325,7 +1329,7 @@ class SuperLaserLand_JD_RP:
 		elif DAC_number == 1:
 			return_value = (1./self.DAC1_gain * (2.**15.-1))
 		elif DAC_number == 2:
-			return_value = float(1.)/(self.Vref_DAC2) * (2**16-1)
+			return_value = float(self.DAC2_midscale_counts) / self.DAC2_fullscale_volts
 
 		return return_value
 		
@@ -1340,7 +1344,7 @@ class SuperLaserLand_JD_RP:
 		elif DAC_number == 1:
 			return_value = float(self.DAC1_gain / (2.**15.-1))
 		elif DAC_number == 2:
-			return_value = (self.Vref_DAC2) / (2**16-1)
+			return_value = self.DAC2_fullscale_volts / float(self.DAC2_midscale_counts)
 
 		return return_value
 
